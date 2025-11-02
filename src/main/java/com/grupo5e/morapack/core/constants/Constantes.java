@@ -24,6 +24,10 @@ public class Constantes {
     public static final double TIEMPO_TRANSPORTE_MISMO_CONTINENTE = 0.5;
     public static final double TIEMPO_TRANSPORTE_DIFERENTE_CONTINENTE = 1.0;
     
+    // Constantes de conexión y estancia mínima
+    public static final int TIEMPO_CONEXION_MINUTOS = 60; // Tiempo de conexión mínimo (incluye estancia mínima)
+    public static final int TIEMPO_ESTANCIA_MINIMO_MINUTOS = 60; // 1 hora mínimo de estancia en destino intermedio
+    
     public static final int CAPACIDAD_MIN_MISMO_CONTINENTE = 200;
     public static final int CAPACIDAD_MAX_MISMO_CONTINENTE = 300;
     public static final int CAPACIDAD_MIN_DIFERENTE_CONTINENTE = 250;

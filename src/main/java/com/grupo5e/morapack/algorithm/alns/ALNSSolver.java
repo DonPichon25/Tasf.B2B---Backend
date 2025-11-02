@@ -77,6 +77,9 @@ public class ALNSSolver {
     private IndiceVuelos indiceVuelos;
     private CacheDisponibilidad cacheDisponibilidad;
 
+    // Validador de rutas optimizado
+    private com.grupo5e.morapack.algorithm.validador.RutasValidador rutasValidador;
+
     // Horizon days
     private static final int HORIZON_DAYS = 4;
     private static final boolean DEBUG_MODE = false;
@@ -165,6 +168,10 @@ public class ALNSSolver {
 
         // Inicializar optimizaciones de rendimiento
         inicializarOptimizaciones();
+
+        // Inicializar validador de rutas optimizado
+        this.rutasValidador = new com.grupo5e.morapack.algorithm.validador.RutasValidador(
+                this.aeropuertos, this.vuelos);
 
         // DEBUG: Verificar vuelos disponibles
         System.out.println("=== VERIFICACIÓN DE VUELOS ===");
@@ -518,6 +525,17 @@ public class ALNSSolver {
             reconstruirCapacidadesDesdeSolucion(solucionTemporal);
             reconstruirAlmacenesDesdeSolucion(solucionTemporal);
 
+            // EARLY STOPPING: Verificar si todos los pedidos están asignados después de reparación
+            if (solucionTemporal.size() == pedidos.size()) {
+                System.out.println("✅ EARLY STOPPING después de reparación: Todos los pedidos asignados (" + 
+                                 solucionTemporal.size() + "/" + pedidos.size() + ")");
+                solucionActual = solucionTemporal;
+                pesoActual = calcularPesoSolucion(solucionTemporal);
+                mejorSolucion.clear();
+                mejorSolucion.put(new HashMap<>(solucionActual), pesoActual);
+                break;
+            }
+
             int pesoTemporal = calcularPesoSolucion(solucionTemporal);
 
             usoOperadores[operadorDestruccion][operadorReparacion]++;
@@ -553,6 +571,13 @@ public class ALNSSolver {
                     System.out.println("Iteración " + iteracion + ": ¡Nueva mejor solución! Peso: " + mejorPeso +
                                      " (mejora: " + String.format("%.2f%%", ratioMejora * 100) + ")" +
                                      " | No asignados: " + poolNoAsignados.size());
+                    
+                    // EARLY STOPPING: Si todos los pedidos están asignados, detener
+                    if (solucionActual.size() == pedidos.size()) {
+                        System.out.println("✅ EARLY STOPPING en iteración " + iteracion + 
+                                         ": Todos los pedidos asignados (" + solucionActual.size() + "/" + pedidos.size() + ")");
+                        break;
+                    }
                 } else if (ratioMejora > 0.05) {
                     puntajesOperadores[operadorDestruccion][operadorReparacion] += 100;
                     conteoSinMejoras = Math.max(0, conteoSinMejoras - 5);
@@ -1326,23 +1351,8 @@ public class ALNSSolver {
     }
 
     private boolean esRutaValida(Pedido pedido, ArrayList<Vuelo> ruta) {
-        if (pedido == null || ruta == null || ruta.isEmpty()) return false;
-
-        int qty = pedido.getProductos() != null && !pedido.getProductos().isEmpty() ? pedido.getProductos().size() : 1;
-
-        if (!cabeEnCapacidad(ruta, qty)) return false;
-
-        Aeropuerto expectedOrigin = obtenerAeropuerto(pedido.getAeropuertoOrigenCodigo());
-        if (expectedOrigin == null || !ruta.get(0).getAeropuertoOrigen().equals(expectedOrigin)) return false;
-
-        for (int i = 0; i < ruta.size() - 1; i++) {
-            if (!ruta.get(i).getAeropuertoDestino().equals(ruta.get(i + 1).getAeropuertoOrigen())) return false;
-        }
-
-        Aeropuerto expectedDestination = obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo());
-        if (expectedDestination == null || !ruta.get(ruta.size() - 1).getAeropuertoDestino().equals(expectedDestination)) return false;
-
-        return seRespetaDeadline(pedido, ruta);
+        // Usar validador optimizado con O(1) lookups y caching
+        return rutasValidador.esRutaValida(pedido, ruta);
     }
 
     private boolean puedeAsignarConOptimizacionEspacio(Pedido pedido, ArrayList<Vuelo> ruta,
@@ -1568,6 +1578,12 @@ public class ALNSSolver {
         }
 
         System.out.println("  Iteración " + iteracion + " completada: " + asignadosEnIteracion + " pedidos asignados");
+
+        // EARLY STOPPING: Si todos los pedidos están asignados, detener
+        if (paquetesAsignados == pedidos.size()) {
+            System.out.println("  ✅ EARLY STOPPING: Todos los pedidos asignados (" + paquetesAsignados + "/" + pedidos.size() + ")");
+            break;
+        }
 
         // Si no se asignaron pedidos en esta iteración, no hay punto en continuar
         if (asignadosEnIteracion == 0) {
