@@ -18,8 +18,10 @@ import java.time.Duration;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Servicio para parsear archivos de simulación desde bytes
@@ -79,10 +81,10 @@ public class FileParsingService {
             List<Aeropuerto> aeropuertos;
             if (aeropuertosFromFile != null && !aeropuertosFromFile.isEmpty()) {
                 aeropuertos = aeropuertosFromFile;
-                result.addWarning("Se usarán los aeropuertos subidos previamente");
+                // No agregar warning, es el flujo normal cuando se suben los 3 archivos
             } else {
                 aeropuertos = aeropuertoService.listar();
-                result.addWarning("Se usarán los aeropuertos de la base de datos");
+                result.addWarning("⚠️ No se subió archivo de aeropuertos. Se usarán los aeropuertos de la base de datos");
             }
             
             List<Vuelo> vuelos = parseVuelosFromBytes(content, aeropuertos);
@@ -91,6 +93,9 @@ public class FileParsingService {
                 result.addError("No se encontraron vuelos válidos en el archivo");
                 return result;
             }
+            
+            // Validar que los aeropuertos existen en BD (necesario para visualización)
+            validateAeropuertosExistenEnBD(vuelos, result);
             
             result.setParsedCount(vuelos.size());
             result.setInfo(String.format("Se encontraron %d vuelos", vuelos.size()));
@@ -120,10 +125,10 @@ public class FileParsingService {
             List<Aeropuerto> aeropuertos;
             if (aeropuertosFromFile != null && !aeropuertosFromFile.isEmpty()) {
                 aeropuertos = aeropuertosFromFile;
-                result.addWarning("Se usarán los aeropuertos subidos previamente");
+                // No agregar warning, es el flujo normal cuando se suben los 3 archivos
             } else {
                 aeropuertos = aeropuertoService.listar();
-                result.addWarning("Se usarán los aeropuertos de la base de datos");
+                result.addWarning("⚠️ No se subió archivo de aeropuertos. Se usarán los aeropuertos de la base de datos");
             }
             
             List<Pedido> pedidos = parsePedidosFromBytes(content, aeropuertos);
@@ -132,6 +137,9 @@ public class FileParsingService {
                 result.addError("No se encontraron pedidos válidos en el archivo");
                 return result;
             }
+            
+            // Validar que los aeropuertos existen en BD (necesario para visualización)
+            validateAeropuertosPedidosExistenEnBD(pedidos, result);
             
             result.setParsedCount(pedidos.size());
             result.setInfo(String.format("Se encontraron %d pedidos", pedidos.size()));
@@ -511,6 +519,72 @@ public class FileParsingService {
         }
         
         return productos;
+    }
+    
+    /**
+     * Valida que todos los aeropuertos referenciados en los vuelos existen en BD
+     * Agrega warnings al resultado si algún aeropuerto no existe
+     */
+    private void validateAeropuertosExistenEnBD(List<Vuelo> vuelos, FileValidationResult result) {
+        List<Aeropuerto> aeropuertosBD = aeropuertoService.listar();
+        Set<String> codigosEnBD = aeropuertosBD.stream()
+                .map(Aeropuerto::getCodigoIATA)
+                .collect(java.util.stream.Collectors.toSet());
+        
+        Set<String> codigosFaltantes = new HashSet<>();
+        
+        for (Vuelo vuelo : vuelos) {
+            String codigoOrigen = vuelo.getAeropuertoOrigen().getCodigoIATA();
+            String codigoDestino = vuelo.getAeropuertoDestino().getCodigoIATA();
+            
+            if (!codigosEnBD.contains(codigoOrigen)) {
+                codigosFaltantes.add(codigoOrigen);
+            }
+            if (!codigosEnBD.contains(codigoDestino)) {
+                codigosFaltantes.add(codigoDestino);
+            }
+        }
+        
+        if (!codigosFaltantes.isEmpty()) {
+            result.addWarning(String.format(
+                "⚠️ Los siguientes aeropuertos no existen en BD y causarán error en visualización: %s. " +
+                "Deben agregarse a la base de datos antes de ejecutar la simulación.",
+                String.join(", ", codigosFaltantes)
+            ));
+        }
+    }
+    
+    /**
+     * Valida que todos los aeropuertos referenciados en los pedidos existen en BD
+     * Agrega warnings al resultado si algún aeropuerto no existe
+     */
+    private void validateAeropuertosPedidosExistenEnBD(List<Pedido> pedidos, FileValidationResult result) {
+        List<Aeropuerto> aeropuertosBD = aeropuertoService.listar();
+        Set<String> codigosEnBD = aeropuertosBD.stream()
+                .map(Aeropuerto::getCodigoIATA)
+                .collect(java.util.stream.Collectors.toSet());
+        
+        Set<String> codigosFaltantes = new HashSet<>();
+        
+        for (Pedido pedido : pedidos) {
+            String codigoOrigen = pedido.getAeropuertoOrigenCodigo();
+            String codigoDestino = pedido.getAeropuertoDestinoCodigo();
+            
+            if (codigoOrigen != null && !codigosEnBD.contains(codigoOrigen)) {
+                codigosFaltantes.add(codigoOrigen);
+            }
+            if (codigoDestino != null && !codigosEnBD.contains(codigoDestino)) {
+                codigosFaltantes.add(codigoDestino);
+            }
+        }
+        
+        if (!codigosFaltantes.isEmpty()) {
+            result.addWarning(String.format(
+                "⚠️ Los siguientes aeropuertos no existen en BD y causarán error en visualización: %s. " +
+                "Deben agregarse a la base de datos antes de ejecutar la simulación.",
+                String.join(", ", codigosFaltantes)
+            ));
+        }
     }
 }
 
