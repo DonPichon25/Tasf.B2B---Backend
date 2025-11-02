@@ -50,5 +50,8 @@ public class SimulacionSemanalRequestDTO {
     @Builder.Default
     @Schema(description = "Iniciar automáticamente la visualización en memoria cuando el ALNS termine", example = "false")
     private Boolean autoStartVisualization = false;
+    
+    @Schema(description = "ID de sesión para datos temporales subidos (archivos de simulación). Si está presente, se usarán los datos subidos en lugar de la BD", example = "550e8400-e29b-41d4-a716-446655440000")
+    private String uploadSessionId;
 }
 

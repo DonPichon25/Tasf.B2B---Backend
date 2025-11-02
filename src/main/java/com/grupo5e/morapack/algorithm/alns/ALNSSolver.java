@@ -84,11 +84,12 @@ public class ALNSSolver {
     private final AeropuertoService aeropuertoService;
     private final PedidoService pedidoService;
     private final VueloService vueloService;
+    private String uploadSessionId; // Para datos temporales subidos
 
     public ALNSSolver(AeropuertoService aeropuertoService,
                       PedidoService pedidoService,
                       VueloService vueloService) {
-        this(aeropuertoService, pedidoService, vueloService, 500, null);
+        this(aeropuertoService, pedidoService, vueloService, 500, null, null);
     }
 
     public ALNSSolver(AeropuertoService aeropuertoService,
@@ -96,11 +97,21 @@ public class ALNSSolver {
                       VueloService vueloService,
                       int maxIteraciones,
                       Integer tiempoLimiteSegundos) {
+        this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos, null);
+    }
+    
+    public ALNSSolver(AeropuertoService aeropuertoService,
+                      PedidoService pedidoService,
+                      VueloService vueloService,
+                      int maxIteraciones,
+                      Integer tiempoLimiteSegundos,
+                      String uploadSessionId) {
         this.solucion = new HashMap<>();
         this.aeropuertoService = aeropuertoService;
         this.pedidoService = pedidoService;
         this.vueloService = vueloService;
         this.maxIteraciones = maxIteraciones;  // Usar parámetro en vez de hardcoded
+        this.uploadSessionId = uploadSessionId;
 
         //inicializr primero las listas
         this.pedidosOriginales = new ArrayList<>(pedidoService.listar());

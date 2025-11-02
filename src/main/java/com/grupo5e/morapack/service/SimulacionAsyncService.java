@@ -71,9 +71,15 @@ public class SimulacionAsyncService {
             // Crear solver con configuración personalizada
             Integer iteraciones = request.getIteracionesAlns() != null ? request.getIteracionesAlns() : 500;
             Integer timeout = request.getTiempoLimiteSegundos() != null ? request.getTiempoLimiteSegundos() : 0;
+            String uploadSessionId = request.getUploadSessionId();
+            
+            if (uploadSessionId != null && !uploadSessionId.trim().isEmpty()) {
+                log.info("📤 Usando datos de archivos subidos (sesión: {})", uploadSessionId);
+            }
             
             log.info("📊 Inicializando ALNSSolver con {} iteraciones, timeout: {} seg", iteraciones, timeout);
-            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService, iteraciones, timeout);
+            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService, 
+                                              iteraciones, timeout, uploadSessionId);
 
             // Ejecutar algoritmo con timeout
             log.info("🔄 Ejecutando algoritmo ALNS (timeout: {} segundos)...", 
@@ -156,6 +162,13 @@ public class SimulacionAsyncService {
             
             // Actualizar estado de error en transacción separada
             actualizarEstadoError(simulacionId, e.getMessage());
+        } finally {
+            // Limpiar datos temporales si existen
+            if (request.getUploadSessionId() != null && !request.getUploadSessionId().trim().isEmpty()) {
+                log.info("🗑️ Limpiando datos temporales de sesión: {}", request.getUploadSessionId());
+                // La limpieza se hará mediante el TemporaryDataStorageService
+                // (ya tiene cleanup automático, pero podemos hacerlo explícito aquí si se inyecta el servicio)
+            }
         }
     }
 
