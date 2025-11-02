@@ -1,5 +1,6 @@
 package com.grupo5e.morapack.algorithm.alns;
 
+import com.grupo5e.morapack.algorithm.alns.modular.DataLoader;
 import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.core.model.Pedido;
 import com.grupo5e.morapack.core.constants.Constantes;
@@ -8,6 +9,7 @@ import com.grupo5e.morapack.core.index.IndiceVuelos;
 import com.grupo5e.morapack.core.index.CacheDisponibilidad;
 import com.grupo5e.morapack.service.AeropuertoService;
 import com.grupo5e.morapack.service.PedidoService;
+import com.grupo5e.morapack.service.TemporaryDataStorageService;
 import com.grupo5e.morapack.service.VueloService;
 import com.grupo5e.morapack.utils.LectorCancelaciones;
 
@@ -29,7 +31,7 @@ public class ALNSSolver {
     private Map<String, Aeropuerto> cacheNombreCiudadAeropuerto;
     private ArrayList<Aeropuerto> aeropuertos;
     private ArrayList<Vuelo> vuelos;
-    private List<Pedido> pedidos;
+    private ArrayList<Pedido> pedidos;
 
     // Unitización - DESACTIVADA para evitar problemas con IDs en BD
     private static final boolean HABILITAR_UNITIZACION_PRODUCTO = false;
@@ -99,7 +101,34 @@ public class ALNSSolver {
                       Integer tiempoLimiteSegundos) {
         this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos, null);
     }
-    
+    public ALNSSolver(AeropuertoService aeropuertoService,
+                      PedidoService pedidoService,
+                      VueloService vueloService,
+                      int maxIteraciones,
+                      Integer tiempoLimiteSegundos,
+                      String uploadSessionId,
+                      TemporaryDataStorageService tempStore,
+                      boolean habilitarUnitizacion) {
+
+        // ⬇️ asigna todos los final
+        this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos);
+        this.uploadSessionId = uploadSessionId;
+        //this.habilitarUnitizacion = habilitarUnitizacion;
+
+        // Usa DataLoader para cargar datos (archivos o BD)
+        DataLoader loader = new DataLoader(aeropuertoService, pedidoService, vueloService, tempStore);
+        DataLoader.DataLoadResult data = loader.cargarDatos(true, this.uploadSessionId);
+
+        this.aeropuertos       = (ArrayList<Aeropuerto>) data.aeropuertos;
+        this.vuelos            = (ArrayList<Vuelo>) data.vuelos;
+        //this.pedidos           = (ArrayList<Pedido>) data.pedidos;
+        this.pedidosOriginales = (ArrayList<Pedido>) data.pedidosOriginales;
+        // 🔧 IMPORTANTE: re-asignar orígenes si vienen nulos
+        asignarAeropuertosOrigen();
+
+        // y reconstruir caches que dependen de listas
+        inicializarCacheCiudadAeropuerto();
+    }
     public ALNSSolver(AeropuertoService aeropuertoService,
                       PedidoService pedidoService,
                       VueloService vueloService,
@@ -134,7 +163,7 @@ public class ALNSSolver {
         asignarAeropuertosOrigen();
 
         if (HABILITAR_UNITIZACION_PRODUCTO) {
-            this.pedidos = expandirPaquetesAUnidadesProducto(this.pedidosOriginales);
+            this.pedidos = (ArrayList<Pedido>) expandirPaquetesAUnidadesProducto(this.pedidosOriginales);
             System.out.println("UNITIZACIÓN APLICADA: " + this.pedidosOriginales.size() +
                                " pedidos originales → " + this.pedidos.size() + " unidades de producto");
         } else {

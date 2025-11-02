@@ -36,20 +36,22 @@ public class SimulacionAsyncService {
     private final PedidoService pedidoService;
     private final VueloService vueloService;
     private final SimulationEngine simulationEngine;
-
+    private final TemporaryDataStorageService temporaryDataStorageService;
     public SimulacionAsyncService(
             SimulacionSemanalRepository simulacionRepository,
             SimulacionAsignacionRepository asignacionRepository,
             AeropuertoService aeropuertoService,
             PedidoService pedidoService,
             VueloService vueloService,
-            @Lazy SimulationEngine simulationEngine) {
+            @Lazy SimulationEngine simulationEngine,
+            TemporaryDataStorageService temporaryDataStorageService) {
         this.simulacionRepository = simulacionRepository;
         this.asignacionRepository = asignacionRepository;
         this.aeropuertoService = aeropuertoService;
         this.pedidoService = pedidoService;
         this.vueloService = vueloService;
         this.simulationEngine = simulationEngine;
+        this.temporaryDataStorageService = temporaryDataStorageService;
     }
 
     /**
@@ -78,8 +80,18 @@ public class SimulacionAsyncService {
             }
             
             log.info("📊 Inicializando ALNSSolver con {} iteraciones, timeout: {} seg", iteraciones, timeout);
-            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService, 
-                                              iteraciones, timeout, uploadSessionId);
+//            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService,
+//                                              iteraciones, timeout, uploadSessionId);
+            ALNSSolver solver = new ALNSSolver(
+                    aeropuertoService,
+                    pedidoService,
+                    vueloService,
+                    iteraciones,
+                    timeout,
+                    uploadSessionId,
+                    temporaryDataStorageService,
+                    true
+            );
 
             // Ejecutar algoritmo con timeout
             log.info("🔄 Ejecutando algoritmo ALNS (timeout: {} segundos)...", 
