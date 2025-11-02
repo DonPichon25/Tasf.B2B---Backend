@@ -80,6 +80,9 @@ public class ALNSSolver {
     // Validador de rutas optimizado
     private com.grupo5e.morapack.algorithm.validador.RutasValidador rutasValidador;
 
+    // Tracker de productos para seguimiento granular
+    private com.grupo5e.morapack.algorithm.tracker.TrackerProducto trackerProducto;
+
     // Horizon days
     private static final int HORIZON_DAYS = 4;
     private static final boolean DEBUG_MODE = false;
@@ -172,6 +175,10 @@ public class ALNSSolver {
         // Inicializar validador de rutas optimizado
         this.rutasValidador = new com.grupo5e.morapack.algorithm.validador.RutasValidador(
                 this.aeropuertos, this.vuelos);
+
+        // Inicializar tracker de productos
+        this.trackerProducto = new com.grupo5e.morapack.algorithm.tracker.TrackerProducto();
+        this.trackerProducto.inicializarDesdePedidos(this.pedidos);
 
         // DEBUG: Verificar vuelos disponibles
         System.out.println("=== VERIFICACIÓN DE VUELOS ===");
@@ -336,6 +343,9 @@ public class ALNSSolver {
         inicializarOcupacionTemporalAlmacenes();
         System.out.println("\n=== INICIANDO ALGORITMO ALNS ===");
         ejecutarAlgoritmoALNS();
+
+        System.out.println("\n=== ACTUALIZANDO SEGUIMIENTO DE PRODUCTOS ===");
+        actualizarTrackingProductos();
 
         System.out.println("\n=== RESULTADO FINAL ALNS ===");
         this.imprimirDescripcionSolucion(2);
@@ -2527,6 +2537,62 @@ public class ALNSSolver {
         
         return noAsignados;
     }
+
+    /**
+     * Obtiene la solución a nivel producto (no solo pedido).
+     * Útil para APIs y reportes que requieren información granular.
+     * 
+     * @return Map<Producto, ArrayList<Vuelo>> solución a nivel producto
+     */
+    public Map<Producto, ArrayList<Vuelo>> getSolucionNivelProducto() {
+        if (trackerProducto == null) {
+            return new HashMap<>();
+        }
+        return trackerProducto.obtenerSolucionNivelProducto();
+    }
+
+    /**
+     * Actualiza el tracking de productos con la mejor solución encontrada.
+     * Asigna las rutas de cada pedido a todos sus productos individuales.
+     */
+    private void actualizarTrackingProductos() {
+        if (trackerProducto == null) {
+            System.out.println("⚠️ TrackerProducto no está inicializado");
+            return;
+        }
+
+        // Obtener la mejor solución
+        HashMap<Pedido, ArrayList<Vuelo>> mejorSolucion = getMejorSolucion();
+
+        if (mejorSolucion == null || mejorSolucion.isEmpty()) {
+            System.out.println("⚠️ No hay solución disponible para actualizar tracking");
+            return;
+        }
+
+        int productosRastreados = 0;
+
+        // Asignar cada pedido de la solución a sus productos
+        for (Map.Entry<Pedido, ArrayList<Vuelo>> entry : mejorSolucion.entrySet()) {
+            Pedido pedido = entry.getKey();
+            ArrayList<Vuelo> ruta = entry.getValue();
+
+            // Asignar la ruta al pedido en el tracker
+            trackerProducto.asignarPedidoARuta(pedido, ruta);
+
+            // Contar productos del pedido
+            if (pedido.getProductos() != null) {
+                productosRastreados += pedido.getProductos().size();
+            } else {
+                productosRastreados += 1; // Si no tiene productos, contar como 1
+            }
+        }
+
+        System.out.println("Productos rastreados: " + productosRastreados);
+        
+        // Imprimir resumen de tracking
+        trackerProducto.imprimirResumenTracking();
+    }
+
     //METODO PARA AGREGAR AEROPUERTOS ORIGEN
     private void asignarAeropuertosOrigen(){
         for(Pedido pedido : pedidosOriginales){
