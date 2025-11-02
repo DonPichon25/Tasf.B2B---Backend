@@ -101,34 +101,86 @@ public class ALNSSolver {
                       Integer tiempoLimiteSegundos) {
         this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos, null);
     }
-    public ALNSSolver(AeropuertoService aeropuertoService,
-                      PedidoService pedidoService,
-                      VueloService vueloService,
-                      int maxIteraciones,
-                      Integer tiempoLimiteSegundos,
-                      String uploadSessionId,
-                      TemporaryDataStorageService tempStore,
-                      boolean habilitarUnitizacion) {
+//    public ALNSSolver(AeropuertoService aeropuertoService,
+//                      PedidoService pedidoService,
+//                      VueloService vueloService,
+//                      int maxIteraciones,
+//                      Integer tiempoLimiteSegundos,
+//                      String uploadSessionId,
+//                      TemporaryDataStorageService tempStore,
+//                      boolean habilitarUnitizacion) {
+//
+//        // ⬇️ asigna todos los final
+//        //this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos);
+//        this.aeropuertoService=aeropuertoService;
+//        this.pedidoService=pedidoService;
+//        this.vueloService=vueloService;
+//        this.maxIteraciones=maxIteraciones;
+//        this.uploadSessionId=uploadSessionId;
+//        //this.habilitarUnitizacion = habilitarUnitizacion;
+//
+//        // Usa DataLoader para cargar datos (archivos o BD)
+//        DataLoader loader = new DataLoader(aeropuertoService, pedidoService, vueloService, tempStore);
+//        DataLoader.DataLoadResult data = loader.cargarDatos(true, this.uploadSessionId);
+//
+//        this.aeropuertos       = (ArrayList<Aeropuerto>) data.aeropuertos;
+//        this.vuelos            = (ArrayList<Vuelo>) data.vuelos;
+//        this.pedidos           = (ArrayList<Pedido>) data.pedidos;
+//        this.pedidosOriginales = (ArrayList<Pedido>) data.pedidosOriginales;
+//
+//        // 🔧 IMPORTANTE: re-asignar orígenes si vienen nulos
+//        asignarAeropuertosOrigen();
+//        // y reconstruir caches que dependen de listas
+//        inicializarCacheCiudadAeropuerto();
+//    }
+public ALNSSolver(AeropuertoService aeropuertoService,
+                  PedidoService pedidoService,
+                  VueloService vueloService,
+                  int maxIteraciones,
+                  Integer tiempoLimiteSegundos,
+                  String uploadSessionId,
+                  TemporaryDataStorageService tempStore,
+                  boolean habilitarUnitizacion) {
 
-        // ⬇️ asigna todos los final
-        this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos);
-        this.uploadSessionId = uploadSessionId;
-        //this.habilitarUnitizacion = habilitarUnitizacion;
+    this.aeropuertoService = aeropuertoService;
+    this.pedidoService = pedidoService;
+    this.vueloService = vueloService;
+    this.maxIteraciones = maxIteraciones;
+    this.uploadSessionId = uploadSessionId;
 
-        // Usa DataLoader para cargar datos (archivos o BD)
-        DataLoader loader = new DataLoader(aeropuertoService, pedidoService, vueloService, tempStore);
-        DataLoader.DataLoadResult data = loader.cargarDatos(true, this.uploadSessionId);
+    // 1) Cargar datos (BD o archivos subidos)
+    DataLoader loader = new DataLoader(aeropuertoService, pedidoService, vueloService, tempStore);
+    DataLoader.DataLoadResult data = loader.cargarDatos(habilitarUnitizacion, this.uploadSessionId);
 
-        this.aeropuertos       = (ArrayList<Aeropuerto>) data.aeropuertos;
-        this.vuelos            = (ArrayList<Vuelo>) data.vuelos;
-        //this.pedidos           = (ArrayList<Pedido>) data.pedidos;
-        this.pedidosOriginales = (ArrayList<Pedido>) data.pedidosOriginales;
-        // 🔧 IMPORTANTE: re-asignar orígenes si vienen nulos
-        asignarAeropuertosOrigen();
+    this.aeropuertos       = new ArrayList<>(data.aeropuertos);
+    this.vuelos            = new ArrayList<>(data.vuelos);
+    this.pedidos           = new ArrayList<>(data.pedidos);
+    this.pedidosOriginales = new ArrayList<>(data.pedidosOriginales);
 
-        // y reconstruir caches que dependen de listas
-        inicializarCacheCiudadAeropuerto();
-    }
+    // 2) Estructuras base
+    this.solucion = new HashMap<>();
+    this.ocupacionAlmacenes = new HashMap<>();
+    this.ocupacionTemporalAlmacenes = new HashMap<>();
+
+    // 3) “Fix” de datos y cachés
+    asignarAeropuertosOrigen();
+    inicializarCacheCiudadAeropuerto();
+    inicializarT0();
+
+    // 4) RNG y operadores
+    this.aleatorio = new Random(System.currentTimeMillis());
+    this.operadoresDestruccion = new ALNSDestruction(this.aeropuertos, aeropuertoService);
+    this.operadoresReparacion  = new ALNSRepair(this.aeropuertos, this.vuelos, this.ocupacionAlmacenes, aeropuertoService);
+
+    // 5) Parámetros/estado del ALNS
+    inicializarParametrosALNS();
+    inicializarCapacidadAeropuertos();
+    inicializarOcupacionTemporalAlmacenes();
+
+    // 6) Servicios auxiliares / optimizaciones
+    inicializarServicioDisponibilidad();
+    inicializarOptimizaciones();
+}
     public ALNSSolver(AeropuertoService aeropuertoService,
                       PedidoService pedidoService,
                       VueloService vueloService,
