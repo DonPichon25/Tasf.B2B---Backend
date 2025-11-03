@@ -71,9 +71,15 @@ public class SimulacionAsyncService {
             // Crear solver con configuración personalizada
             Integer iteraciones = request.getIteracionesAlns() != null ? request.getIteracionesAlns() : 500;
             Integer timeout = request.getTiempoLimiteSegundos() != null ? request.getTiempoLimiteSegundos() : 0;
+            String uploadSessionId = request.getUploadSessionId();
+            
+            if (uploadSessionId != null && !uploadSessionId.trim().isEmpty()) {
+                log.info("📤 Usando datos de archivos subidos (sesión: {})", uploadSessionId);
+            }
             
             log.info("📊 Inicializando ALNSSolver con {} iteraciones, timeout: {} seg", iteraciones, timeout);
-            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService, iteraciones, timeout);
+            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService, 
+                                              iteraciones, timeout, uploadSessionId);
 
             // Ejecutar algoritmo con timeout
             log.info("🔄 Ejecutando algoritmo ALNS (timeout: {} segundos)...", 
@@ -156,6 +162,13 @@ public class SimulacionAsyncService {
             
             // Actualizar estado de error en transacción separada
             actualizarEstadoError(simulacionId, e.getMessage());
+        } finally {
+            // Limpiar datos temporales si existen
+            if (request.getUploadSessionId() != null && !request.getUploadSessionId().trim().isEmpty()) {
+                log.info("🗑️ Limpiando datos temporales de sesión: {}", request.getUploadSessionId());
+                // La limpieza se hará mediante el TemporaryDataStorageService
+                // (ya tiene cleanup automático, pero podemos hacerlo explícito aquí si se inyecta el servicio)
+            }
         }
     }
 
@@ -216,15 +229,50 @@ public class SimulacionAsyncService {
                 // Crear asignación
                 SimulacionAsignacion asignacion = new SimulacionAsignacion();
                 asignacion.setSimulacion(simulacion);
-                asignacion.setPedido(pedido);
                 asignacion.setSecuencia(secuencia + 1);
-                asignacion.setVuelo(vuelo);
                 asignacion.setMinutoInicio(minutoInicio);
                 asignacion.setMinutoFin(minutoFin);
                 asignacion.setLatitudInicio(latOrigen);
                 asignacion.setLongitudInicio(lonOrigen);
                 asignacion.setLatitudFin(latDestino);
                 asignacion.setLongitudFin(lonDestino);
+                
+                // Detectar si son datos temporales (sin IDs de BD)
+                boolean esTemporalData = (vuelo.getId() == 0 || pedido.getId() == null);
+                asignacion.setEsTemporalData(esTemporalData);
+                
+                if (esTemporalData) {
+                    // Modo temporal: NO usar FKs, guardar datos desnormalizados
+                    asignacion.setVuelo(null);
+                    asignacion.setPedido(null);
+                    
+                    // Guardar info del vuelo
+                    asignacion.setVueloCodigoOrigen(origen.getCodigoIATA());
+                    asignacion.setVueloCodigoDestino(destino.getCodigoIATA());
+                    asignacion.setVueloCiudadOrigen(origen.getCiudad() != null ? origen.getCiudad().getNombre() : origen.getCodigoIATA());
+                    asignacion.setVueloCiudadDestino(destino.getCiudad() != null ? destino.getCiudad().getNombre() : destino.getCodigoIATA());
+                    asignacion.setVueloCapacidadMaxima(vuelo.getCapacidadMaxima());
+                    asignacion.setVueloHoraSalida(vuelo.getHoraSalida());
+                    asignacion.setVueloHoraLlegada(vuelo.getHoraLlegada());
+                    asignacion.setVueloDuracion(vuelo.getTiempoTransporte());
+                    
+                    // Guardar info del pedido
+                    asignacion.setPedidoCodigoOrigen(pedido.getAeropuertoOrigenCodigo());
+                    asignacion.setPedidoCodigoDestino(pedido.getAeropuertoDestinoCodigo());
+                    asignacion.setPedidoCantidadProductos(pedido.getProductos() != null ? pedido.getProductos().size() : 1);
+                    
+                    if (contador == 0) {
+                        log.info("✅ Usando modo TEMPORAL (datos de archivos subidos)");
+                    }
+                } else {
+                    // Modo BD: usar FKs normales
+                    asignacion.setVuelo(vuelo);
+                    asignacion.setPedido(pedido);
+                    
+                    if (contador == 0) {
+                        log.info("✅ Usando modo BD (datos con FKs)");
+                    }
+                }
 
                 asignacionRepository.save(asignacion);
 

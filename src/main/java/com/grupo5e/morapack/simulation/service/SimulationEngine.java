@@ -149,8 +149,31 @@ public class SimulationEngine {
     /**
      * Construye snapshots de vuelos desde las asignaciones de la BD
      * Solo incluye vuelos con aeropuertos de origen y destino DISPONIBLES
+     * Soporta tanto datos de BD (con FKs) como datos temporales (desnormalizados)
      */
     private List<FlightSnapshot> buildFlightSnapshots(List<SimulacionAsignacion> asignaciones) {
+        if (asignaciones.isEmpty()) {
+            log.warn("⚠️ No hay asignaciones para construir vuelos");
+            return new ArrayList<>();
+        }
+        
+        // Detectar modo (BD vs Temporal)
+        SimulacionAsignacion primera = asignaciones.get(0);
+        boolean esTemporalData = Boolean.TRUE.equals(primera.getEsTemporalData());
+        
+        if (esTemporalData) {
+            log.info("📤 Construyendo snapshots desde datos TEMPORALES (archivos subidos)");
+            return buildFlightSnapshotsFromTemporalData(asignaciones);
+        } else {
+            log.info("💾 Construyendo snapshots desde datos de BD (con FKs)");
+            return buildFlightSnapshotsFromBD(asignaciones);
+        }
+    }
+    
+    /**
+     * Construye snapshots desde datos de BD (modo clásico con FKs)
+     */
+    private List<FlightSnapshot> buildFlightSnapshotsFromBD(List<SimulacionAsignacion> asignaciones) {
         // Agrupar asignaciones por vuelo
         Map<Integer, List<SimulacionAsignacion>> byFlight = asignaciones.stream()
                 .collect(Collectors.groupingBy(a -> a.getVuelo().getId()));
@@ -261,6 +284,147 @@ public class SimulationEngine {
         log.info("✅ {} vuelos cargados en memoria ({} omitidos)", snapshots.size(), vuelosFiltrados);
         
         return snapshots;
+    }
+    
+    /**
+     * Construye snapshots desde datos temporales (archivos subidos)
+     * No usa FKs, lee info desnormalizada de las asignaciones
+     */
+    private List<FlightSnapshot> buildFlightSnapshotsFromTemporalData(List<SimulacionAsignacion> asignaciones) {
+        // Agrupar asignaciones por código de vuelo único (origen-destino-hora)
+        Map<String, List<SimulacionAsignacion>> byFlightCode = asignaciones.stream()
+                .collect(Collectors.groupingBy(a -> 
+                    a.getVueloCodigoOrigen() + "-" + a.getVueloCodigoDestino() + "-" + a.getVueloHoraSalida()
+                ));
+        
+        List<FlightSnapshot> snapshots = new ArrayList<>();
+        int vuelosFiltrados = 0;
+        int flightIdCounter = 1;
+        
+        for (Map.Entry<String, List<SimulacionAsignacion>> entry : byFlightCode.entrySet()) {
+            String flightCode = entry.getKey();
+            List<SimulacionAsignacion> vueloAsignaciones = entry.getValue();
+            
+            // Tomar la primera asignación para datos del vuelo
+            SimulacionAsignacion first = vueloAsignaciones.get(0);
+            
+            // Obtener aeropuertos de BD por código IATA
+            Aeropuerto origen;
+            Aeropuerto destino;
+            try {
+                origen = getAeropuertoFromBD(first.getVueloCodigoOrigen());
+                destino = getAeropuertoFromBD(first.getVueloCodigoDestino());
+            } catch (RuntimeException e) {
+                log.error("❌ Error obteniendo aeropuertos para vuelo {}: {}", flightCode, e.getMessage());
+                vuelosFiltrados++;
+                continue;
+            }
+            
+            // Filtrar vuelos con aeropuertos inactivos
+            if (origen.getEstado() != EstadoAeropuerto.DISPONIBLE) {
+                log.debug("⏩ Vuelo {} omitido: aeropuerto origen {} está inactivo", 
+                         flightCode, origen.getCodigoIATA());
+                vuelosFiltrados++;
+                continue;
+            }
+            
+            if (destino.getEstado() != EstadoAeropuerto.DISPONIBLE) {
+                log.debug("⏩ Vuelo {} omitido: aeropuerto destino {} está inactivo", 
+                         flightCode, destino.getCodigoIATA());
+                vuelosFiltrados++;
+                continue;
+            }
+            
+            // Contar pedidos únicos (por cantidad de asignaciones)
+            int numeroPedidos = vueloAsignaciones.size();
+            List<Long> packagesOnBoard = new ArrayList<>();
+            for (int i = 0; i < numeroPedidos; i++) {
+                packagesOnBoard.add((long) (flightIdCounter * 1000 + i)); // IDs ficticios
+            }
+            
+            // Calcular capacidad usada (suma de productos de todos los pedidos)
+            int capacidadUsadaDinamica = vueloAsignaciones.stream()
+                    .mapToInt(a -> a.getPedidoCantidadProductos() != null ? a.getPedidoCantidadProductos() : 1)
+                    .sum();
+            
+            int capacidadMaxima = first.getVueloCapacidadMaxima() != null ? first.getVueloCapacidadMaxima() : 100;
+            
+            // Coordenadas
+            double originLat = first.getLatitudInicio();
+            double originLng = first.getLongitudInicio();
+            double destLat = first.getLatitudFin();
+            double destLng = first.getLongitudFin();
+            
+            // Tiempos (usar el rango completo del vuelo)
+            Integer minutoInicio = vueloAsignaciones.stream()
+                    .map(SimulacionAsignacion::getMinutoInicio)
+                    .min(Integer::compare)
+                    .orElse(0);
+            
+            Integer minutoFin = vueloAsignaciones.stream()
+                    .map(SimulacionAsignacion::getMinutoFin)
+                    .max(Integer::compare)
+                    .orElse(0);
+            
+            // Obtener T0
+            LocalDateTime t0 = first.getSimulacion().getTiempoInicialReferencia();
+            
+            LocalDateTime departureTime = t0.plusMinutes(minutoInicio);
+            LocalDateTime arrivalTime = t0.plusMinutes(minutoFin);
+            
+            FlightSnapshot snapshot = FlightSnapshot.builder()
+                    .flightId(flightIdCounter)
+                    .flightCode(flightCode)
+                    .route(new double[][]{{originLng, originLat}, {destLng, destLat}})
+                    .originLat(originLat)
+                    .originLng(originLng)
+                    .destinationLat(destLat)
+                    .destinationLng(destLng)
+                    .currentLat(originLat)
+                    .currentLng(originLng)
+                    .departureTime(departureTime)
+                    .arrivalTime(arrivalTime)
+                    .status(FlightStatus.SCHEDULED)
+                    .progress(0.0)
+                    .progressPercentage(0.0)
+                    .packagesOnBoard(packagesOnBoard)
+                    .capacityUsed(capacidadUsadaDinamica)
+                    .capacityMax(capacidadMaxima)
+                    .occupancyPercentage(capacidadMaxima > 0 ? 
+                            (capacidadUsadaDinamica * 100.0) / capacidadMaxima : 0)
+                    .originCode(first.getVueloCodigoOrigen())
+                    .destinationCode(first.getVueloCodigoDestino())
+                    .originCity(first.getVueloCiudadOrigen() != null ? first.getVueloCiudadOrigen() : origen.getCiudad().getNombre())
+                    .destinationCity(first.getVueloCiudadDestino() != null ? first.getVueloCiudadDestino() : destino.getCiudad().getNombre())
+                    .durationMinutes(minutoFin - minutoInicio)
+                    .build();
+            
+            snapshots.add(snapshot);
+            flightIdCounter++;
+        }
+        
+        if (vuelosFiltrados > 0) {
+            log.warn("⚠️ {} vuelos omitidos (aeropuertos inactivos o no encontrados)", vuelosFiltrados);
+        }
+        
+        log.info("✅ {} vuelos cargados en memoria desde datos temporales ({} omitidos)", 
+                 snapshots.size(), vuelosFiltrados);
+        
+        return snapshots;
+    }
+    
+    /**
+     * Obtiene un aeropuerto de BD por código IATA
+     * Usado para datos temporales que solo tienen códigos, no objetos completos
+     */
+    private Aeropuerto getAeropuertoFromBD(String codigoIATA) {
+        return aeropuertoService.listar().stream()
+                .filter(a -> a.getCodigoIATA().equals(codigoIATA))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException(
+                    "Aeropuerto no encontrado en BD: " + codigoIATA + 
+                    ". Los aeropuertos referenciados en archivos deben existir en BD para visualización."
+                ));
     }
     
     /**

@@ -29,6 +29,9 @@ public class ALNSRepair {
     private Random aleatorio;
 
     private final AeropuertoService aeropuertoService;
+    
+    // Validador de rutas optimizado
+    private com.grupo5e.morapack.algorithm.validador.RutasValidador rutasValidador;
 
     public ALNSRepair(ArrayList<Aeropuerto> aeropuertos, ArrayList<Vuelo> vuelos,
                       HashMap<Aeropuerto, Integer> ocupacionAlmacenes, AeropuertoService aeropuertoService) {
@@ -37,6 +40,10 @@ public class ALNSRepair {
         this.ocupacionAlmacenes = ocupacionAlmacenes;
         this.aeropuertoService = aeropuertoService;
         this.aleatorio = new Random(System.currentTimeMillis());
+
+        // Inicializar validador de rutas optimizado
+        this.rutasValidador = new com.grupo5e.morapack.algorithm.validador.RutasValidador(
+                this.aeropuertos, this.vuelos);
 
         // VERIFICACIÓN DE DATOS
         System.out.println("ALNSRepair inicializado con:");
@@ -59,6 +66,10 @@ public class ALNSRepair {
         this.ocupacionAlmacenes = ocupacionAlmacenes;
         this.aleatorio = new Random(semilla);
         this.aeropuertoService = aeropuertoService;
+        
+        // Inicializar validador de rutas optimizado
+        this.rutasValidador = new com.grupo5e.morapack.algorithm.validador.RutasValidador(
+                this.aeropuertos, this.vuelos);
     }
 
     /**
@@ -1067,41 +1078,13 @@ public class ALNSRepair {
      * PATCH: Versión con cantidad específica de productos
      */
     private boolean esRutaValida(Pedido pedido, ArrayList<Vuelo> ruta, int cantidad) {
-        //System.out.println("  Validando ruta para pedido " + pedido.getId() + "...");
-
-        if (ruta == null || ruta.isEmpty()) {
-            boolean mismoAeropuerto = obtenerAeropuerto(pedido.getAeropuertoOrigenCodigo()).getCiudad().
-                    equals(obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo()).getCiudad());
-            System.out.println("  Ruta vacía - Mismo aeropuerto: " + mismoAeropuerto);
-            return mismoAeropuerto;
-        }
-
-        // Verificar capacidad de vuelos con cantidad específica
+        // Usar validador optimizado con O(1) lookups y caching
+        // Nota: el validador maneja la cantidad de productos internamente
+        // Verificar capacidad adicional con la cantidad específica antes de validar
         if (!cabeEnCapacidadRuta(ruta, cantidad)) {
-            //System.out.println("  ❌ No cabe en capacidad de vuelos");
             return false;
         }
-        //System.out.println("  ✅ Capacidad de vuelos OK");
-
-        // Verificar continuidad de ruta
-        Ciudad ubicacionActual = obtenerAeropuerto(pedido.getAeropuertoOrigenCodigo()).getCiudad();
-        for (int i = 0; i < ruta.size(); i++) {
-            Vuelo vuelo = ruta.get(i);
-            String aeropuertoActualCodigo = vuelo.getAeropuertoOrigen().getCodigoIATA();
-            if(ruta.size()==1 && !aeropuertoActualCodigo.equals(pedido.getAeropuertoDestinoCodigo())){
-                return false;
-            } else if (i!=0) {
-                //verificamos vuelos
-                if(!aeropuertoActualCodigo.equals(ruta.get(i-1).getAeropuertoDestino().getCodigoIATA()))
-                    return false;
-            }
-        }
-
-        // Verificar deadline
-        boolean deadlineOk = seRespetaDeadline(pedido, ruta);
-        //System.out.println("  ✅ Deadline respetado: " + deadlineOk);
-
-        return deadlineOk;
+        return rutasValidador.esRutaValida(pedido, ruta);
     }
     /**
      * PATCH: Versión con cantidad específica de productos
