@@ -31,7 +31,7 @@ public class ALNSSolver {
     private Map<String, Aeropuerto> cacheNombreCiudadAeropuerto;
     private ArrayList<Aeropuerto> aeropuertos;
     private ArrayList<Vuelo> vuelos;
-    private ArrayList<Pedido> pedidos;
+    private List<Pedido> pedidos;
 
     // Unitización - DESACTIVADA para evitar problemas con IDs en BD
     private static final boolean HABILITAR_UNITIZACION_PRODUCTO = false;
@@ -154,8 +154,8 @@ public ALNSSolver(AeropuertoService aeropuertoService,
 
     this.aeropuertos       = new ArrayList<>(data.aeropuertos);
     this.vuelos            = new ArrayList<>(data.vuelos);
-    this.pedidos           = new ArrayList<>(data.pedidos);
-    this.pedidosOriginales = new ArrayList<>(data.pedidosOriginales);
+    this.pedidos           = (data.pedidos);
+    //this.pedidosOriginales = new ArrayList<>(data.pedidosOriginales);
 
     // 2) Estructuras base
     this.solucion = new HashMap<>();
@@ -215,7 +215,7 @@ public ALNSSolver(AeropuertoService aeropuertoService,
         asignarAeropuertosOrigen();
 
         if (HABILITAR_UNITIZACION_PRODUCTO) {
-            this.pedidos = (ArrayList<Pedido>) expandirPaquetesAUnidadesProducto(this.pedidosOriginales);
+            this.pedidos = expandirPaquetesAUnidadesProducto(this.pedidosOriginales);
             System.out.println("UNITIZACIÓN APLICADA: " + this.pedidosOriginales.size() +
                                " pedidos originales → " + this.pedidos.size() + " unidades de producto");
         } else {

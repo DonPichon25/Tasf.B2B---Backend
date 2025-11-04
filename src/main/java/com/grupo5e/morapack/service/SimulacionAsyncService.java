@@ -82,6 +82,7 @@ public class SimulacionAsyncService {
             log.info("📊 Inicializando ALNSSolver con {} iteraciones, timeout: {} seg", iteraciones, timeout);
 //            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService, vueloService,
 //                                              iteraciones, timeout, uploadSessionId);
+
             ALNSSolver solver = new ALNSSolver(
                     aeropuertoService,
                     pedidoService,
