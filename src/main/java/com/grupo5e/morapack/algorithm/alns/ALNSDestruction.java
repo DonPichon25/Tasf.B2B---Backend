@@ -19,23 +19,33 @@
      */
     public class ALNSDestruction {
     
-        private ArrayList<Aeropuerto> aeropuertos;
-        private Random aleatorio;
-        private final AeropuertoService aeropuertoService;
-    
-        public ALNSDestruction(ArrayList<Aeropuerto> aeropuertos,AeropuertoService aeropuertoService) {
-            this.aeropuertoService = aeropuertoService;
-            this.aleatorio = new Random(System.currentTimeMillis());
-            this.aeropuertos = aeropuertos;
-        }
-    
-        /**
-         * Constructor con semilla específica para pruebas deterministas
-         */
-        public ALNSDestruction(long semilla, AeropuertoService aeropuertoService) {
-            this.aleatorio = new Random(semilla);
-            this.aeropuertoService = aeropuertoService;
-        }
+    private ArrayList<Aeropuerto> aeropuertos;
+    private Random aleatorio;
+    private final AeropuertoService aeropuertoService;
+
+    /**
+     * Constructor simplificado sin dependencias de Spring.
+     * Usado por ALNSSolver con FuenteDatosInput modular.
+     */
+    public ALNSDestruction(ArrayList<Aeropuerto> aeropuertos) {
+        this.aeropuertos = aeropuertos;
+        this.aleatorio = new Random(System.currentTimeMillis());
+        this.aeropuertoService = null; // No se usa en la implementación actual
+    }
+
+    public ALNSDestruction(ArrayList<Aeropuerto> aeropuertos,AeropuertoService aeropuertoService) {
+        this.aeropuertoService = aeropuertoService;
+        this.aleatorio = new Random(System.currentTimeMillis());
+        this.aeropuertos = aeropuertos;
+    }
+
+    /**
+     * Constructor con semilla específica para pruebas deterministas
+     */
+    public ALNSDestruction(long semilla, AeropuertoService aeropuertoService) {
+        this.aleatorio = new Random(semilla);
+        this.aeropuertoService = aeropuertoService;
+    }
     
         /**
          * CORRECCIÓN: Helpers para cálculos precisos de slack y productos

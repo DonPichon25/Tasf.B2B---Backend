@@ -27,24 +27,24 @@ public class CiudadServiceImpl implements CiudadService {
 
     @Override
     @Transactional
-    public Long insertar(Ciudad ciudad) {
-        return (long) ciudadRepository.save(ciudad).getId();
+    public Integer insertar(Ciudad ciudad) {
+        return ciudadRepository.save(ciudad).getId();
     }
 
     @Override
     @Transactional
-    public Ciudad actualizar(Long id, Ciudad ciudad) {
+    public Ciudad actualizar(Integer id, Ciudad ciudad) {
         Ciudad existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Ciudad", "id", id);
         }
-        ciudad.setId(id.intValue());
+        ciudad.setId(id);
         return ciudadRepository.save(ciudad);
     }
 
     @Override
-    public Ciudad buscarPorId(Long id) {
-        return ciudadRepository.findById(id.intValue()).orElse(null);
+    public Ciudad buscarPorId(Integer id) {
+        return ciudadRepository.findById(id).orElse(null);
     }
 
     @Override
@@ -54,16 +54,16 @@ public class CiudadServiceImpl implements CiudadService {
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(Integer id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Ciudad", "id", id);
         }
-        ciudadRepository.deleteById(id.intValue());
+        ciudadRepository.deleteById(id);
     }
 
     @Override
-    public boolean existePorId(Long id) {
-        return ciudadRepository.existsById(id.intValue());
+    public boolean existePorId(Integer id) {
+        return ciudadRepository.existsById(id);
     }
 
     @Override

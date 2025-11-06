@@ -15,7 +15,7 @@ import java.util.List;
 public class AlnsRequestDTO {
 
     @Schema(description = "Lista de IDs de pedidos a optimizar (vacío = todos los pedidos pendientes)")
-    private List<Long> pedidosIds;
+    private List<Integer> pedidosIds;
 
     @Min(value = 1, message = "El número de iteraciones debe ser al menos 1")
     @Max(value = 10000, message = "El número de iteraciones no puede exceder 10000")
@@ -36,5 +36,8 @@ public class AlnsRequestDTO {
     @Min(value = 1, message = "El horizonte debe ser al menos 1 día")
     @Max(value = 30, message = "El horizonte no puede exceder 30 días")
     private Integer diasHorizonte;
+    
+    @Schema(description = "Fuente de datos: ARCHIVOS o BASE_DE_DATOS", example = "BASE_DE_DATOS", allowableValues = {"ARCHIVOS", "BASE_DE_DATOS"})
+    private String fuente;
 }
 

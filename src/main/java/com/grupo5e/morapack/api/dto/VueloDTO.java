@@ -71,8 +71,8 @@ public class VueloDTO {
     @Schema(description = "Estado actual del vuelo", example = "CONFIRMADO", required = true)
     private EstadoVuelo estado;
 
-    @Schema(description = "ID de la ruta asignada", example = "1")
-    private Integer rutaAsignadaId;
+    @Schema(description = "Lista de IDs de rutas que usan este vuelo")
+    private java.util.List<Integer> rutasIds;
 
     @Schema(description = "Identificador único del vuelo (ORIGEN-DESTINO-HH:MM)", example = "SKBO-SEQM-08:30")
     private String identificadorVuelo;

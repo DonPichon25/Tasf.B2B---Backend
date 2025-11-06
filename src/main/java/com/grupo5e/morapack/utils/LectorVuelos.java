@@ -28,7 +28,6 @@ public class LectorVuelos {
     public ArrayList<Vuelo> leerVuelos() {
         try (BufferedReader reader = new BufferedReader(new FileReader(rutaArchivo))) {
             String linea;
-            int idVuelo = 1;
             Map<String, Aeropuerto> mapaAeropuertos = crearMapaAeropuertos();
             
             while ((linea = reader.readLine()) != null) {
@@ -64,7 +63,7 @@ public class LectorVuelos {
                         
                         // Crear objeto Vuelo
                         Vuelo vuelo = new Vuelo();
-                        vuelo.setId(idVuelo++);
+                        // NO setear el ID manualmente, Hibernate lo genera automáticamente
                         vuelo.setFrecuenciaPorDia(1.0); // Frecuencia por defecto
                         vuelo.setAeropuertoOrigen(aeropuertoOrigen);
                         vuelo.setAeropuertoDestino(aeropuertoDestino);

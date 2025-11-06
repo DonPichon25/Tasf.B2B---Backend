@@ -7,6 +7,8 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -20,34 +22,42 @@ import java.util.List;
 public class Pedido {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
+
+    @Column(name = "nombre", nullable = true)
+    private String nombre;
 
     // Relación: muchos pedidos pertenecen a un cliente
-    @ManyToOne
-    @JoinColumn(name = "cliente_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "cliente_id", nullable = true)
     private Cliente cliente;
 
     // Aeropuerto destino
-    @JoinColumn(name = "aeropuerto_destino_codigo", nullable = false)
     private String aeropuertoDestinoCodigo;
 
     private LocalDateTime fechaPedido;
+    
+    @Column(nullable = false)
     private LocalDateTime fechaLimiteEntrega;
 
     @Enumerated(EnumType.STRING)
     private EstadoPedido estado;
 
     // Aeropuerto donde se encuentra actualmente
-    @JoinColumn(name = "aeropuerto_origen_codigo")
     private String aeropuertoOrigenCodigo;
 
+    private Double horasRecogida;
+
+    @CreationTimestamp
+    private LocalDateTime fechaCreacion;
+
+    @UpdateTimestamp
+    private LocalDateTime fechaActualizacion;
+
     // Relación con Ruta (opcional si ya tienes la clase)
-    @ManyToMany
-    @JoinTable(
-         name = "rutas_pedidos",
-            joinColumns = @JoinColumn(name = "ruta_id"),
-            inverseJoinColumns = @JoinColumn(name = "pedido_id")
-    )
+    // NOTA: La relación con Ruta ahora se maneja desde Ruta.java
+    // con tabla intermedia "ruta_pedidos" (mappedBy en el lado de Ruta)
+    @ManyToMany(mappedBy = "pedidos")
     private List<Ruta> rutas;
 
     private double prioridad;
@@ -55,6 +65,10 @@ public class Pedido {
     // Relación: un paquete puede contener varios productos
     @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<Producto> productos;
+
+    // Relación: un pedido puede tener varios planes de viaje (histórico)
+    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<PlanViaje> planesViaje;
 
     private int cantidadProductos;
 }

@@ -106,7 +106,7 @@ public class LectorPedidosTest {
 
                 // --- Crear productos ---
                 ArrayList<Producto> productos = new ArrayList<>();
-                Long idProducto=0L;
+                Integer idProducto = 0;
                 for (int i = 0; i < cantidadProductos; i++) {
                     Producto producto = new Producto();
                     producto.setEstado(EstadoProducto.EN_ALMACEN);
@@ -124,7 +124,7 @@ public class LectorPedidosTest {
 
                 // --- Guardar en BD ---
                 try {
-                    Long idGuardado = pedidoService.insertar(pedido);
+                    Integer idGuardado = pedidoService.insertar(pedido);
                     totalPedidos++;
                     System.out.printf("[OK] Pedido guardado ID=%d | Cliente=%s | Destino=%s%n",
                             idGuardado, cliente.getNombres(), aeropuertoDestino.getCodigoIATA());

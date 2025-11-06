@@ -12,7 +12,7 @@ import lombok.*;
 public class AeropuertoUbicacionDTO {
 
     @Schema(description = "ID del aeropuerto", example = "1")
-    private Long id;
+    private Integer id;
 
     @Schema(description = "Código IATA", example = "SKBO")
     private String codigoIATA;

@@ -9,7 +9,7 @@ import java.util.List;
 
 @Repository
 public interface VueloRepository extends JpaRepository<Vuelo, Integer> {
-    List<Vuelo> findByAeropuertoOrigenIdAndAeropuertoDestinoId(Long origenId, Long destinoId);
+    List<Vuelo> findByAeropuertoOrigenIdAndAeropuertoDestinoId(Integer origenId, Integer destinoId);
     List<Vuelo> findByEstado(EstadoVuelo estado);
-    List<Vuelo> findByCapacidadMaximaGreaterThanEqual(int capacidad);
+    List<Vuelo> findByCapacidadMaximaGreaterThanEqual(Integer capacidad);
 }

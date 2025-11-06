@@ -30,6 +30,29 @@ public class ALNSRepair {
 
     private final AeropuertoService aeropuertoService;
 
+    /**
+     * Constructor simplificado sin dependencias de Spring.
+     * Usado por ALNSSolver con FuenteDatosInput modular.
+     */
+    public ALNSRepair(ArrayList<Aeropuerto> aeropuertos, ArrayList<Vuelo> vuelos,
+                      HashMap<Aeropuerto, Integer> ocupacionAlmacenes) {
+        this.aeropuertos = aeropuertos;
+        this.vuelos = vuelos;
+        this.ocupacionAlmacenes = ocupacionAlmacenes;
+        this.aeropuertoService = null; // No se usa en la implementación actual
+        this.aleatorio = new Random(System.currentTimeMillis());
+
+        // VERIFICACIÓN DE DATOS
+        System.out.println("ALNSRepair inicializado con:");
+        System.out.println("  - Aeropuertos: " + this.aeropuertos.size());
+        System.out.println("  - Vuelos: " + this.vuelos.size());
+        System.out.println("  - Ocupación almacenes: " + this.ocupacionAlmacenes.size());
+
+        if (this.vuelos.isEmpty()) {
+            System.err.println("❌ ALERTA: ALNSRepair recibió lista de vuelos vacía");
+        }
+    }
+
     public ALNSRepair(ArrayList<Aeropuerto> aeropuertos, ArrayList<Vuelo> vuelos,
                       HashMap<Aeropuerto, Integer> ocupacionAlmacenes, AeropuertoService aeropuertoService) {
         this.aeropuertos = aeropuertos;

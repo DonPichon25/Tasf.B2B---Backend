@@ -16,24 +16,51 @@ import lombok.Setter;
 public class Aeropuerto {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     // Código IATA
-    @Column(nullable = false, unique = true, length = 4)
+    @Column(nullable = false, unique = true, length = 8)
     private String codigoIATA;
 
-    private int zonaHorariaUTC;
+    @Column(length = 120)
+    private String alias;
+
+    private Integer zonaHorariaUTC;
     private String latitud;
     private String longitud;
 
-    private int capacidadActual;
-    private int capacidadMaxima;
-
-    // Relación 1:1 con Ciudad
-    @OneToOne
-    @JoinColumn(name = "ciudad_id", referencedColumnName = "id", nullable = false, unique = true)
+    // Relación con Ciudad (muchos aeropuertos pueden estar en una ciudad)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "ciudad_id", nullable = false)
     private Ciudad ciudad;
 
     @Enumerated(EnumType.STRING)
     private EstadoAeropuerto estado;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "almacen_id")
+    private Almacen almacen;
+    
+    // Métodos de conveniencia para compatibilidad con código existente
+    // Delegan al Almacen asociado
+    
+    public Integer getCapacidadMaxima() {
+        return almacen != null ? almacen.getCapacidadMaxima() : 0;
+    }
+    
+    public Integer getCapacidadActual() {
+        return almacen != null ? almacen.getCapacidadUsada() : 0;
+    }
+    
+    public void setCapacidadActual(Integer capacidad) {
+        if (almacen != null) {
+            almacen.setCapacidadUsada(capacidad);
+        }
+    }
+    
+    public void setCapacidadMaxima(Integer capacidad) {
+        if (almacen != null) {
+            almacen.setCapacidadMaxima(capacidad);
+        }
+    }
 }

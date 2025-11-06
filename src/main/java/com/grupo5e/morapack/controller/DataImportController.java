@@ -1,0 +1,391 @@
+package com.grupo5e.morapack.controller;
+
+import com.grupo5e.morapack.service.DataImportService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * Controller para importar datos desde archivos .txt
+ * Sigue el patrón de MoraPack-Backend: cada archivo se procesa y guarda en BD inmediatamente
+ */
+@RestController
+@RequestMapping("/api/data-import")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "*")
+@Tag(name = "Importación de Datos", description = "API para importar aeropuertos, vuelos y pedidos desde archivos")
+@Slf4j
+public class DataImportController {
+
+    private final DataImportService dataImportService;
+
+    /**
+     * Importar aeropuertos desde archivo .txt
+     * POST /api/data-import/airports
+     * 
+     * Formato esperado: aeropuertosinfo.txt
+     */
+    @Operation(
+        summary = "Importar aeropuertos",
+        description = "Importa aeropuertos desde archivo .txt y los guarda en BD inmediatamente"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Aeropuertos importados exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Archivo inválido o error en el procesamiento")
+    })
+    @PostMapping(value = "/airports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadAirports(
+            @Parameter(description = "Archivo aeropuertosinfo.txt")
+            @RequestParam("file") MultipartFile file) {
+        
+        String filename = file.getOriginalFilename();
+        log.info("📤 Recibida solicitud de importación de aeropuertos: {}", filename);
+        
+        // Validar archivo básico
+        if (file.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo está vacío");
+            log.warn("❌ Archivo vacío rechazado");
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        if (filename == null || !filename.endsWith(".txt")) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo debe ser formato .txt");
+            log.warn("❌ Formato de archivo inválido: {}", filename);
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        // Procesar e insertar en BD
+        Map<String, Object> result = dataImportService.importAirports(file);
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        
+        if (success) {
+            log.info("✅ Aeropuertos importados: {}", result.get("count"));
+        } else {
+            log.error("❌ Error importando aeropuertos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Importar vuelos desde archivo .txt
+     * POST /api/data-import/flights
+     * 
+     * Formato esperado: vuelos.txt (ORIGEN-DESTINO-SALIDA-LLEGADA-CAPACIDAD)
+     * Requiere que existan aeropuertos en BD
+     */
+    @Operation(
+        summary = "Importar vuelos",
+        description = "Importa vuelos desde archivo .txt y los guarda en BD inmediatamente. Requiere aeropuertos previamente importados."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Vuelos importados exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Archivo inválido, error en el procesamiento o aeropuertos no encontrados")
+    })
+    @PostMapping(value = "/flights", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadFlights(
+            @Parameter(description = "Archivo vuelos.txt")
+            @RequestParam("file") MultipartFile file) {
+        
+        String filename = file.getOriginalFilename();
+        log.info("📤 Recibida solicitud de importación de vuelos: {}", filename);
+        
+        // Validar archivo básico
+        if (file.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo está vacío");
+            log.warn("❌ Archivo vacío rechazado");
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        if (filename == null || !filename.endsWith(".txt")) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo debe ser formato .txt");
+            log.warn("❌ Formato de archivo inválido: {}", filename);
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        // Procesar e insertar en BD
+        Map<String, Object> result = dataImportService.importFlights(file);
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        
+        if (success) {
+            log.info("✅ Vuelos importados: {}", result.get("count"));
+        } else {
+            log.error("❌ Error importando vuelos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Importar pedidos desde archivo .txt
+     * POST /api/data-import/orders
+     * 
+     * Formato esperado: pedidos.txt (id-fecha-hora-minuto-destino-cantidad-cliente)
+     * Requiere que existan aeropuertos en BD
+     */
+    @Operation(
+        summary = "Importar pedidos",
+        description = "Importa pedidos desde archivo .txt y los guarda en BD inmediatamente. Requiere aeropuertos previamente importados."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Pedidos importados exitosamente"),
+        @ApiResponse(responseCode = "400", description = "Archivo inválido, error en el procesamiento o aeropuertos no encontrados")
+    })
+    @PostMapping(value = "/orders", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadOrders(
+            @Parameter(description = "Archivo pedidos.txt")
+            @RequestParam("file") MultipartFile file) {
+        
+        String filename = file.getOriginalFilename();
+        log.info("📤 Recibida solicitud de importación de pedidos: {}", filename);
+        
+        // Validar archivo básico
+        if (file.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo está vacío");
+            log.warn("❌ Archivo vacío rechazado");
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        if (filename == null || !filename.endsWith(".txt")) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo debe ser formato .txt");
+            log.warn("❌ Formato de archivo inválido: {}", filename);
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        // Procesar e insertar en BD
+        Map<String, Object> result = dataImportService.importOrders(file);
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        
+        if (success) {
+            log.info("✅ Pedidos importados: {}", result.get("count"));
+        } else {
+            log.error("❌ Error importando pedidos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Obtener estadísticas de la base de datos
+     * GET /api/data-import/stats
+     */
+    @Operation(
+        summary = "Estadísticas de base de datos",
+        description = "Obtiene conteos actuales de aeropuertos, vuelos, pedidos y productos en la BD"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Estadísticas obtenidas exitosamente")
+    })
+    @GetMapping("/stats")
+    public ResponseEntity<Map<String, Object>> getDatabaseStats() {
+        log.info("📊 Solicitud de estadísticas de BD");
+        Map<String, Object> stats = dataImportService.getDatabaseStats();
+        return ResponseEntity.ok(stats);
+    }
+
+    /**
+     * Limpiar TODA la base de datos (respeta foreign keys)
+     * DELETE /api/data-import/clear-all
+     * 
+     * ADVERTENCIA: Elimina TODOS los datos en orden correcto
+     */
+    @Operation(
+        summary = "Limpiar toda la base de datos",
+        description = "ADVERTENCIA: Elimina TODOS los datos de la BD (simulaciones, asignaciones, pedidos, productos, vuelos, aeropuertos, ciudades)"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Base de datos limpiada exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error al limpiar base de datos")
+    })
+    @DeleteMapping("/clear-all")
+    public ResponseEntity<Map<String, Object>> clearAllData() {
+        log.warn("🗑️ LIMPIEZA COMPLETA de base de datos solicitada");
+        Map<String, Object> result = dataImportService.clearAllData();
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR;
+        
+        if (success) {
+            log.info("✅ Base de datos limpiada exitosamente");
+        } else {
+            log.error("❌ Error limpiando base de datos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Limpiar solo pedidos y productos
+     * DELETE /api/data-import/clear-orders
+     */
+    @Operation(
+        summary = "Limpiar solo pedidos",
+        description = "Elimina pedidos, productos y sus asignaciones/simulaciones relacionadas"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Pedidos eliminados exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error al eliminar pedidos")
+    })
+    @DeleteMapping("/clear-orders")
+    public ResponseEntity<Map<String, Object>> clearOrders() {
+        log.warn("🗑️ Limpieza de PEDIDOS solicitada");
+        Map<String, Object> result = dataImportService.clearOrders();
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR;
+        
+        if (success) {
+            log.info("✅ Pedidos eliminados: {}", result.get("deleted"));
+        } else {
+            log.error("❌ Error eliminando pedidos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Limpiar solo vuelos
+     * DELETE /api/data-import/clear-flights
+     */
+    @Operation(
+        summary = "Limpiar solo vuelos",
+        description = "Elimina vuelos y sus asignaciones/simulaciones relacionadas"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Vuelos eliminados exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error al eliminar vuelos")
+    })
+    @DeleteMapping("/clear-flights")
+    public ResponseEntity<Map<String, Object>> clearFlights() {
+        log.warn("🗑️ Limpieza de VUELOS solicitada");
+        Map<String, Object> result = dataImportService.clearFlights();
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR;
+        
+        if (success) {
+            log.info("✅ Vuelos eliminados: {}", result.get("deleted"));
+        } else {
+            log.error("❌ Error eliminando vuelos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Limpiar aeropuertos y ciudades
+     * DELETE /api/data-import/clear-airports
+     * 
+     * ADVERTENCIA: También elimina vuelos, pedidos y simulaciones dependientes
+     */
+    @Operation(
+        summary = "Limpiar aeropuertos",
+        description = "ADVERTENCIA: Elimina aeropuertos, ciudades y TODOS los datos dependientes (vuelos, pedidos, simulaciones)"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Aeropuertos eliminados exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error al eliminar aeropuertos")
+    })
+    @DeleteMapping("/clear-airports")
+    public ResponseEntity<Map<String, Object>> clearAirports() {
+        log.warn("🗑️ Limpieza de AEROPUERTOS solicitada (incluye datos dependientes)");
+        Map<String, Object> result = dataImportService.clearAirports();
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR;
+        
+        if (success) {
+            log.info("✅ Aeropuertos eliminados: {}", result.get("deleted"));
+        } else {
+            log.error("❌ Error eliminando aeropuertos: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Limpiar solo simulaciones (mantiene datos base)
+     * DELETE /api/data-import/clear-simulations
+     */
+    @Operation(
+        summary = "Limpiar solo simulaciones",
+        description = "Elimina resultados de simulaciones pero mantiene datos base (aeropuertos, vuelos, pedidos)"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Simulaciones eliminadas exitosamente"),
+        @ApiResponse(responseCode = "500", description = "Error al eliminar simulaciones")
+    })
+    @DeleteMapping("/clear-simulations")
+    public ResponseEntity<Map<String, Object>> clearSimulations() {
+        log.warn("🗑️ Limpieza de SIMULACIONES solicitada");
+        Map<String, Object> result = dataImportService.clearSimulations();
+        
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR;
+        
+        if (success) {
+            log.info("✅ Simulaciones eliminadas: {}", result.get("deleted"));
+        } else {
+            log.error("❌ Error eliminando simulaciones: {}", result.get("message"));
+        }
+        
+        return ResponseEntity.status(status).body(result);
+    }
+
+    /**
+     * Obtener estado de la importación
+     * GET /api/data-import/status
+     */
+    @Operation(
+        summary = "Estado de importación",
+        description = "Obtiene información sobre los endpoints de importación disponibles"
+    )
+    @GetMapping("/status")
+    public ResponseEntity<Map<String, Object>> getImportStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("message", "Endpoints de importación operacionales");
+        status.put("endpoints", Map.of(
+            "airports", "/api/data-import/airports (POST)",
+            "flights", "/api/data-import/flights (POST)",
+            "orders", "/api/data-import/orders (POST)",
+            "stats", "/api/data-import/stats (GET)",
+            "clear-all", "/api/data-import/clear-all (DELETE)",
+            "clear-orders", "/api/data-import/clear-orders (DELETE)",
+            "clear-flights", "/api/data-import/clear-flights (DELETE)",
+            "clear-airports", "/api/data-import/clear-airports (DELETE)",
+            "clear-simulations", "/api/data-import/clear-simulations (DELETE)"
+        ));
+        return ResponseEntity.ok(status);
+    }
+}
+

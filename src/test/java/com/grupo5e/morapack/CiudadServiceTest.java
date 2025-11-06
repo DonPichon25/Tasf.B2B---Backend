@@ -22,7 +22,7 @@ public class CiudadServiceTest {
         ciudad.setPais("Perú");
         ciudad.setContinente(Continente.AMERICA);
 
-        Long idGenerado = ciudadService.insertar(ciudad);
+        Integer idGenerado = ciudadService.insertar(ciudad);
 
         assertThat(idGenerado).isNotNull();
         assertThat(idGenerado).isGreaterThan(0);

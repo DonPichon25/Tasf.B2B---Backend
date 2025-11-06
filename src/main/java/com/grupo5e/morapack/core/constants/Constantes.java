@@ -1,13 +1,43 @@
 package com.grupo5e.morapack.core.constants;
 
 public class Constantes {
-    // Rutas de archivos
+    // ===================================================================
+    // MODO DE FUENTE DE DATOS
+    // ===================================================================
+    /**
+     * Modo de fuente de datos del algoritmo ALNS.
+     * Valores posibles: "ARCHIVO" o "BASEDATOS"
+     * Se puede configurar mediante variable de entorno MODO_FUENTE_DATOS
+     */
+    public static final String MODO_FUENTE_DATOS = 
+        System.getenv("MODO_FUENTE_DATOS") != null ? 
+        System.getenv("MODO_FUENTE_DATOS") : "ARCHIVO";
+    
+    // ===================================================================
+    // RUTAS DE ARCHIVOS
+    // ===================================================================
     public static final String RUTA_ARCHIVO_INFO_AEROPUERTOS = "data/aeropuertosinfo.txt";
     public static final String RUTA_ARCHIVO_VUELOS = "data/vuelos.txt";
     public static final String RUTA_ARCHIVO_PRODUCTOS = "data/productos.txt";
     public static final String RUTA_ARCHIVO_CANCELACIONES = "data/cancelaciones.txt";
     
-    // Constantes del algoritmo
+    // ===================================================================
+    // CONSTANTES DE TIEMPO (ALGORITMO)
+    // ===================================================================
+    /**
+     * Tiempo mínimo de layover en aeropuertos intermedios: 1 hora
+     * Requisito del sistema: productos en tránsito (destino intermedio) deben esperar mínimo 1 hora
+     */
+    public static final int TIEMPO_LAYOVER_MINIMO_MINUTOS = 60;
+    
+    /**
+     * Tiempo de conexión entre vuelos: 1 hora
+     */
+    public static final int TIEMPO_CONEXION_MINUTOS = 60;
+    
+    // ===================================================================
+    // CONSTANTES DEL ALGORITMO
+    // ===================================================================
     public static final int LIMITE_INFERIOR_ESPACIO_SOLUCION = 100;
     public static final int LIMITE_SUPERIOR_ESPACIO_SOLUCION = 200;
     

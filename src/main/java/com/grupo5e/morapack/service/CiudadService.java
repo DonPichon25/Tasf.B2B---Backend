@@ -7,11 +7,11 @@ import java.util.Optional;
 
 public interface CiudadService {
     List<Ciudad> listar();
-    Long insertar(Ciudad ciudad);
-    Ciudad actualizar(Long id, Ciudad ciudad);
-    Ciudad buscarPorId(Long id);
+    Integer insertar(Ciudad ciudad);
+    Ciudad actualizar(Integer id, Ciudad ciudad);
+    Ciudad buscarPorId(Integer id);
     Optional<Ciudad> buscarPorCodigo(String codigo);
-    void eliminar(Long id);
-    boolean existePorId(Long id);
+    void eliminar(Integer id);
+    boolean existePorId(Integer id);
     List<Ciudad> insertarBulk(List<Ciudad> ciudades);
 }

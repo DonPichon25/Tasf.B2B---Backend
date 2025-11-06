@@ -8,12 +8,12 @@ import java.util.Optional;
 public interface AeropuertoService {
     List<Aeropuerto> listar();
     List<Aeropuerto> listarDisponibles();
-    Long insertar(Aeropuerto aeropuerto);
-    Aeropuerto actualizar(Long id, Aeropuerto aeropuerto);
-    Aeropuerto toggleEstado(Long id);
-    Aeropuerto buscarPorId(Long id);
+    Integer insertar(Aeropuerto aeropuerto);
+    Aeropuerto actualizar(Integer id, Aeropuerto aeropuerto);
+    Aeropuerto toggleEstado(Integer id);
+    Aeropuerto buscarPorId(Integer id);
     Optional<Aeropuerto> buscarPorCodigoIATA(String codigoIATA);
-    void eliminar(Long id);
-    boolean existePorId(Long id);
+    void eliminar(Integer id);
+    boolean existePorId(Integer id);
     List<Aeropuerto> insertarBulk(List<Aeropuerto> aeropuertos);
 }

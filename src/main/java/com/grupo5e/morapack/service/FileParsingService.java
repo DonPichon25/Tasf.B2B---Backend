@@ -407,7 +407,7 @@ public class FileParsingService {
 
                         // Crear pedido
                         Pedido pedido = new Pedido();
-                        pedido.setId(Long.parseLong(idPedidoStr));
+                        pedido.setId(Integer.parseInt(idPedidoStr));
                         pedido.setCliente(cliente);
                         pedido.setAeropuertoDestinoCodigo(aeropuertoDestino.getCodigoIATA());
                         pedido.setFechaPedido(fechaPedido);

@@ -1,29 +1,20 @@
 package com.grupo5e.morapack.demos;
 
 import com.grupo5e.morapack.algorithm.alns.ALNSSolver;
-import com.grupo5e.morapack.service.AeropuertoService;
-import com.grupo5e.morapack.service.PedidoService;
-import com.grupo5e.morapack.service.VueloService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+/**
+ * Test runner para ALNSSolver.
+ * Actualizado para usar el nuevo constructor sin dependencias de Spring Services.
+ * ALNSSolver ahora carga datos usando FuenteDatosInput modular (archivo o BD).
+ */
 @Component
 public class ALNSTestRunner implements CommandLineRunner {
-
-    private final AeropuertoService aeropuertoService;
-    private final PedidoService pedidoService;
-    private final VueloService vueloService;
     
     @Value("${alns.test.enabled:false}")
     private boolean alnsTestEnabled;
-
-    // Constructor con dependencias inyectadas
-    public ALNSTestRunner(AeropuertoService aeropuertoService, PedidoService pedidoService,VueloService vueloService) {
-        this.aeropuertoService = aeropuertoService;
-        this.pedidoService = pedidoService;
-        this.vueloService = vueloService;
-    }
 
     @Override
     public void run(String... args) throws Exception {
@@ -34,16 +25,10 @@ public class ALNSTestRunner implements CommandLineRunner {
         }
         
         System.out.println("🚀 INICIANDO PRUEBA DEL ALNSSOLVER 🚀");
+        System.out.println("📂 ALNSSolver cargará datos desde FuenteDatosInput modular");
+        System.out.println("   (Modo configurado en MODO_FUENTE_DATOS env var: ARCHIVO o BASEDATOS)");
 
         try {
-            // Verificar que los servicios estén disponibles
-            System.out.println("\n=== VERIFICANDO SERVICIOS ===");
-            System.out.println("AeropuertoService: " + (aeropuertoService != null ? "✅ DISPONIBLE" : "❌ NO DISPONIBLE"));
-            System.out.println("PedidoService: " + (pedidoService != null ? "✅ DISPONIBLE" : "❌ NO DISPONIBLE"));
-
-            if (aeropuertoService == null || pedidoService == null || vueloService == null) {
-                throw new RuntimeException("Servicios no disponibles");
-            }
 
 //            // Verificar datos
 //            System.out.println("\n=== VERIFICANDO DATOS ===");
@@ -70,9 +55,11 @@ public class ALNSTestRunner implements CommandLineRunner {
 //                    System.out.println("  - Pedido " + p.getId() + ": " +
 //                            p.getAeropuertoOrigenCodigo() + " → " + p.getAeropuertoDestinoCodigo()));
 
-            // Crear solver
+            // Crear solver con nuevo constructor simplificado
+            // ALNSSolver ahora carga datos automáticamente desde FuenteDatosInput
             System.out.println("\n=== INICIALIZANDO ALNSSOLVER ===");
-            ALNSSolver solver = new ALNSSolver(aeropuertoService, pedidoService,vueloService);
+            System.out.println("Usando constructor simplificado con 100 iteraciones");
+            ALNSSolver solver = new ALNSSolver(100); // Menos iteraciones para prueba rápida
 
             // Ejecutar algoritmo
             System.out.println("\n=== EJECUTANDO ALGORITMO ===");
@@ -93,6 +80,8 @@ public class ALNSTestRunner implements CommandLineRunner {
 
             if (valida && capacidadValida) {
                 System.out.println("🎉 ¡PRUEBA EXITOSA!");
+            } else {
+                System.out.println("⚠️  ADVERTENCIA: La solución tiene problemas de validación");
             }
 
         } catch (Exception e) {

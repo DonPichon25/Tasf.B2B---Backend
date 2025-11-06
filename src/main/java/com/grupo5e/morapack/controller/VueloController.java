@@ -51,7 +51,7 @@ public class VueloController {
     @GetMapping("/{id}")
     public ResponseEntity<Vuelo> obtenerPorId(
             @Parameter(description = "ID del vuelo", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Vuelo vuelo = vueloService.buscarPorId(id);
         if (vuelo == null) {
             throw new ResourceNotFoundException("Vuelo", "id", id);
@@ -66,9 +66,9 @@ public class VueloController {
     @GetMapping("/ruta")
     public ResponseEntity<List<Vuelo>> buscarPorRuta(
             @Parameter(description = "ID del aeropuerto origen", required = true)
-            @RequestParam Long origenId,
+            @RequestParam Integer origenId,
             @Parameter(description = "ID del aeropuerto destino", required = true)
-            @RequestParam Long destinoId) {
+            @RequestParam Integer destinoId) {
         return ResponseEntity.ok(vueloService.buscarPorRuta(origenId, destinoId));
     }
 

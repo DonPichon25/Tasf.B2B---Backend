@@ -16,7 +16,7 @@ import lombok.Setter;
 public class Ciudad {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Integer id;
     private String codigo; //DE 4 LETRAS SEGUN EL txt
     private String nombre; //nombre de la ciudad
     private String pais; //pais de la ciudad

@@ -54,7 +54,7 @@ public class PedidoController {
     @GetMapping("/{id}")
     public ResponseEntity<Pedido> obtenerPorId(
             @Parameter(description = "ID del pedido", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Pedido pedido = pedidoService.buscarPorId(id);
         if (pedido == null) {
             throw new ResourceNotFoundException("Pedido", "id", id);
@@ -69,8 +69,8 @@ public class PedidoController {
                     content = @Content(mediaType = "application/json", schema = @Schema(implementation = ErrorResponseDTO.class)))
     })
     @PostMapping
-    public ResponseEntity<Long> crear(@Valid @RequestBody Pedido pedido) {
-        Long id = pedidoService.insertar(pedido);
+    public ResponseEntity<Integer> crear(@Valid @RequestBody Pedido pedido) {
+        Integer id = pedidoService.insertar(pedido);
         return ResponseEntity.status(HttpStatus.CREATED).body(id);
     }
 
@@ -84,7 +84,7 @@ public class PedidoController {
     @PutMapping("/{id}")
     public ResponseEntity<Pedido> actualizar(
             @Parameter(description = "ID del pedido", required = true)
-            @PathVariable Long id,
+            @PathVariable Integer id,
             @Valid @RequestBody Pedido pedido) {
         Pedido actualizado = pedidoService.actualizar(id, pedido);
         return ResponseEntity.ok(actualizado);
@@ -99,7 +99,7 @@ public class PedidoController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(description = "ID del pedido", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         pedidoService.eliminar(id);
         return ResponseEntity.noContent().build();
     }
@@ -134,7 +134,7 @@ public class PedidoController {
     @PatchMapping("/{id}/estado")
     public ResponseEntity<Pedido> actualizarEstado(
             @Parameter(description = "ID del pedido", required = true)
-            @PathVariable Long id,
+            @PathVariable Integer id,
             @Parameter(description = "Nuevo estado del pedido", required = true)
             @RequestParam EstadoPedido estado) {
         Pedido actualizado = pedidoService.actualizarEstado(id, estado);
@@ -147,11 +147,11 @@ public class PedidoController {
             @ApiResponse(responseCode = "400", description = "Error en la validación de datos")
     })
     @PostMapping("/bulk")
-    public ResponseEntity<BulkResponseDTO<Long>> crearBulk(@Valid @RequestBody List<Pedido> pedidos) {
+    public ResponseEntity<BulkResponseDTO<Integer>> crearBulk(@Valid @RequestBody List<Pedido> pedidos) {
         List<Pedido> creados = pedidoService.insertarBulk(pedidos);
-        List<Long> ids = creados.stream().map(Pedido::getId).collect(Collectors.toList());
+        List<Integer> ids = creados.stream().map(Pedido::getId).collect(Collectors.toList());
         
-        BulkResponseDTO<Long> response = BulkResponseDTO.<Long>builder()
+        BulkResponseDTO<Integer> response = BulkResponseDTO.<Integer>builder()
                 .totalProcesados(pedidos.size())
                 .exitosos(ids.size())
                 .fallidos(0)

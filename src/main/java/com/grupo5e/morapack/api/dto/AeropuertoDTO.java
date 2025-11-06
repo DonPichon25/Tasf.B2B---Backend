@@ -14,7 +14,7 @@ import lombok.*;
 public class AeropuertoDTO {
     
     @Schema(description = "ID único del aeropuerto", example = "1")
-    private Long id;
+    private Integer id;
 
     @NotBlank(message = "El código IATA es obligatorio")
     @Size(min = 4, max = 4, message = "El código IATA debe tener exactamente 4 caracteres")

@@ -7,12 +7,12 @@ import java.util.List;
 
 public interface ProductoService {
     List<Producto> listar();
-    Long insertar(Producto producto);
-    Producto actualizar(Long id, Producto producto);
-    Producto buscarPorId(Long id);
-    List<Producto> buscarPorPedido(Long pedidoId);
+    Integer insertar(Producto producto);
+    Producto actualizar(Integer id, Producto producto);
+    Producto buscarPorId(Integer id);
+    List<Producto> buscarPorPedido(Integer pedidoId);
     List<Producto> buscarPorEstado(EstadoProducto estado);
-    void eliminar(Long id);
-    boolean existePorId(Long id);
+    void eliminar(Integer id);
+    boolean existePorId(Integer id);
     List<Producto> insertarBulk(List<Producto> productos);
 }

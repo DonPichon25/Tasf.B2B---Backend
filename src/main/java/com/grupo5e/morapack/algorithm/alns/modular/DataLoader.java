@@ -116,7 +116,7 @@ public class DataLoader {
         // Implementación simplificada de creación de unidad
         Pedido unidad = new Pedido();
         String idUnidadString = pedidoOriginal.getId() + "#" + indiceUnidad;
-        unidad.setId((long) idUnidadString.hashCode());
+        unidad.setId(idUnidadString.hashCode());
         unidad.setCliente(pedidoOriginal.getCliente());
         unidad.setAeropuertoDestinoCodigo(pedidoOriginal.getAeropuertoDestinoCodigo());
         unidad.setFechaPedido(pedidoOriginal.getFechaPedido());
