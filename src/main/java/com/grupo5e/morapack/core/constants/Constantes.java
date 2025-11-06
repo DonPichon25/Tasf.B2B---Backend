@@ -78,7 +78,44 @@ public class Constantes {
     public static final double RATIO_DESTRUCCION_EXTREMA = 0.8; // 80% destrucción para restart
     public static final int MAX_RESTARTS = 3; // Máximo número de restarts por ejecución
 
-    public static final String ALMACEN_LIMA = "Lima, Peru";
-    public static final String ALMACEN_BRUSELAS = "Brussels, Belgium";
-    public static final String ALMACEN_BAKU = "Baku, Azerbaijan";
+    // ===================================================================
+    // ALMACENES PRINCIPALES CON CAPACIDAD ILIMITADA (CRÍTICO)
+    // ===================================================================
+    /**
+     * Almacenes principales de MoraPack con capacidad ILIMITADA.
+     * Lima (Perú), Bruselas (Bélgica) y Baku (Azerbaiyán) son las sedes centrales.
+     * Estos almacenes tienen stock ilimitado Y capacidad de almacenamiento ilimitada.
+     * 
+     * IMPORTANTE: Esta es una optimización crítica del algoritmo.
+     */
+    public static final String ALMACEN_LIMA = "Lima";
+    public static final String ALMACEN_BRUSELAS = "Brussels";
+    public static final String ALMACEN_BRUSELAS_ES = "Bruselas";
+    public static final String ALMACEN_BAKU = "Baku";
+    
+    /**
+     * Lista de nombres de ciudades que corresponden a almacenes principales.
+     * Se usa para verificar rápidamente si un aeropuerto es almacén principal.
+     */
+    public static final String[] ALMACENES_PRINCIPALES = {
+        "Lima", "lima", "LIMA",
+        "Brussels", "brussels", "BRUSSELS",
+        "Bruselas", "bruselas", "BRUSELAS", 
+        "Brussel", "brussel", "BRUSSEL",
+        "Baku", "baku", "BAKU"
+    };
+    
+    /**
+     * Verifica si un nombre de ciudad corresponde a un almacén principal.
+     * @param nombreCiudad Nombre de la ciudad a verificar
+     * @return true si es almacén principal, false en caso contrario
+     */
+    public static boolean esAlmacenPrincipal(String nombreCiudad) {
+        if (nombreCiudad == null) return false;
+        String nombreLower = nombreCiudad.toLowerCase();
+        return nombreLower.contains("lima") ||
+               nombreLower.contains("brussel") ||
+               nombreLower.contains("bruselas") ||
+               nombreLower.contains("baku");
+    }
 }

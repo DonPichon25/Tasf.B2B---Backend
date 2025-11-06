@@ -30,6 +30,9 @@ public class LineaDeTiempoSimulacionDTO {
     @Schema(description = "Eventos de vuelo ordenados temporalmente")
     private List<EventoLineaDeTiempoVueloDTO> eventos;
     
+    @Schema(description = "Total de eventos en la simulación")
+    private Integer totalEventos;
+    
     @Schema(description = "Rutas de productos para referencia")
     private List<RutaProductoDTO> rutasProductos;
     

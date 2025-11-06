@@ -96,8 +96,26 @@ public class ALNSSolver {
      * @param maxIteraciones Número máximo de iteraciones ALNS
      */
     public ALNSSolver(int maxIteraciones) {
+        this(maxIteraciones, null, null);
+    }
+    
+    /**
+     * Constructor con soporte para ventanas de tiempo (escenarios diarios/semanales).
+     * Si horaInicio y horaFin son null, carga todos los pedidos.
+     * 
+     * @param maxIteraciones Número máximo de iteraciones ALNS
+     * @param horaInicio Hora de inicio de la ventana de simulación (opcional)
+     * @param horaFin Hora de fin de la ventana de simulación (opcional)
+     */
+    public ALNSSolver(int maxIteraciones, LocalDateTime horaInicio, LocalDateTime horaFin) {
         System.out.println("========================================");
         System.out.println("INICIALIZANDO ALNS SOLVER");
+        if (horaInicio != null && horaFin != null) {
+            System.out.println("MODO: Ventana de tiempo especificada");
+            System.out.println("Ventana: " + horaInicio + " a " + horaFin);
+        } else {
+            System.out.println("MODO: Todos los pedidos (sin filtrado de tiempo)");
+        }
         System.out.println("========================================");
         
         // 1. Usar factory para fuente de datos (ARCHIVO o BASEDATOS)
@@ -109,7 +127,15 @@ public class ALNSSolver {
         // 2. Cargar datos desde la fuente
         this.aeropuertos = new ArrayList<>(fuenteDatos.cargarAeropuertos());
         this.vuelos = new ArrayList<>(fuenteDatos.cargarVuelos(this.aeropuertos));
-        this.pedidosOriginales = new ArrayList<>(fuenteDatos.cargarPedidos(this.aeropuertos));
+        
+        // CRÍTICO: Cargar pedidos con filtrado de tiempo si se especifica
+        if (horaInicio != null && horaFin != null) {
+            this.pedidosOriginales = new ArrayList<>(
+                fuenteDatos.cargarPedidosPorVentanaDeTiempo(this.aeropuertos, horaInicio, horaFin)
+            );
+        } else {
+            this.pedidosOriginales = new ArrayList<>(fuenteDatos.cargarPedidos(this.aeropuertos));
+        }
         
         System.out.println("Aeropuertos cargados: " + this.aeropuertos.size());
         System.out.println("Vuelos cargados: " + this.vuelos.size());
@@ -313,8 +339,16 @@ public class ALNSSolver {
         System.out.println("Aeropuertos leídos: " + this.aeropuertos.size());
         System.out.println("Lectura de vuelos");
         System.out.println("Vuelos leídos: " + this.vuelos.size());
-        System.out.println("Lectura de productos");
-        System.out.println("Productos leídos: " + this.pedidos.size());
+        System.out.println("Lectura de pedidos");
+        System.out.println("Pedidos leídos: " + this.pedidos.size());
+        
+        // Contar productos totales (cada pedido puede tener múltiples productos)
+        int totalProductos = this.pedidos.stream()
+            .mapToInt(p -> (p.getProductos() != null && !p.getProductos().isEmpty()) 
+                ? p.getProductos().size() 
+                : 1)
+            .sum();
+        System.out.println("Productos totales: " + totalProductos);
 
         //SE GENERA UNA SOLUCION QUE SE MODIFICARA HASTA HALLAR LA CORRECTA O MEJOR
         System.out.println("\n=== GENERANDO SOLUCIÓN INICIAL ===");
@@ -333,17 +367,16 @@ public class ALNSSolver {
         System.out.println("\n=== INICIANDO ALGORITMO ALNS ===");
         ejecutarAlgoritmoALNS();
 
+        // CRÍTICO: Actualizar ProductTracker con la mejor solución encontrada
+        // (Siguiendo el patrón del Backend de ejemplo)
+        System.out.println("\n=== ACTUALIZANDO SEGUIMIENTO DE PRODUCTOS ===");
+        actualizarSeguimientoProductos();
+
         System.out.println("\n=== RESULTADO FINAL ALNS ===");
         this.imprimirDescripcionSolucion(2);
         
-        // Mapear solución Pedido → Producto para ProductTracker
-        // NOTA: ProductTracker maneja esto internamente durante la asignación de rutas
-        // mapearSolucionAProductos(); // Método no necesario - comentado
-        
-        // Estadísticas finales del ProductTracker
-        if (productTracker != null) {
-            productTracker.printTrackingSummary();
-        }
+        // Imprimir resumen de tracking de productos
+        productTracker.printTrackingSummary();
     }
 
     //Actualiza el pool o inicializa el pool con los pedidos que todavia no tienen rutas por x o y motivos
@@ -1180,19 +1213,22 @@ public class ALNSSolver {
     private Map<Aeropuerto, Integer> crearSnapshotCapacidadAeropuerto() {
         Map<Aeropuerto, Integer> snapshot = new HashMap<>();
         for (Aeropuerto aeropuerto : aeropuertos) {
-            snapshot.put(aeropuerto, aeropuerto.getCapacidadActual());
-            //snapshot.put(aeropuerto, ocupacionAlmacenes.getOrDefault(aeropuerto, 0));
+            // CORREGIDO: Obtener del almacen directamente
+            int capacidad = (aeropuerto.getAlmacen() != null) 
+                ? aeropuerto.getAlmacen().getCapacidadUsada() 
+                : 0;
+            snapshot.put(aeropuerto, capacidad);
         }
         return snapshot;
     }
 
     private void restaurarAeropuertos(Map<Aeropuerto, Integer> snapshot) {
         for(Aeropuerto aeropuerto : aeropuertos) {
-            aeropuerto.setCapacidadActual(snapshot.getOrDefault(aeropuerto, 0));
-            //ocupacionAlmacenes.put(aeropuerto, snapshot.getOrDefault(aeropuerto, 0));
+            // CORREGIDO: Restaurar en el almacen directamente
+            if (aeropuerto.getAlmacen() != null) {
+                aeropuerto.getAlmacen().setCapacidadUsada(snapshot.getOrDefault(aeropuerto, 0));
+            }
         }
-//        ocupacionAlmacenes.clear();
-//        ocupacionAlmacenes.putAll(snapshot);
     }
 
     private void reconstruirAlmacenesDesdeSolucion(HashMap<Pedido, ArrayList<Vuelo>> solucion) {
@@ -1217,8 +1253,11 @@ public class ALNSSolver {
     void actualizarCapacidadAeropuertos(String codigoAeropuertoDestino, int cantidad) {
         for(Aeropuerto aeropuerto : aeropuertos) {
             if(aeropuerto.getCodigoIATA().equals(codigoAeropuertoDestino)) {
-                int capacidadActual = aeropuerto.getCapacidadActual();
-                aeropuerto.setCapacidadActual(capacidadActual + cantidad);
+                // CORREGIDO: Actualizar el almacen directamente
+                if (aeropuerto.getAlmacen() != null) {
+                    int capacidadActual = aeropuerto.getAlmacen().getCapacidadUsada();
+                    aeropuerto.getAlmacen().setCapacidadUsada(capacidadActual + cantidad);
+                }
                 break;
             }
         }
@@ -1258,6 +1297,54 @@ public class ALNSSolver {
         }
 
         System.out.println("T0 inicializado: " + T0);
+    }
+
+    /**
+     * Actualiza el ProductTracker con la mejor solución encontrada por el algoritmo ALNS.
+     * 
+     * Este método se llama UNA VEZ al final del algoritmo, no durante las iteraciones.
+     * 
+     * Para cada pedido en la mejor solución, asigna todos sus productos a la ruta correspondiente.
+     */
+    private void actualizarSeguimientoProductos() {
+        if (productTracker == null) {
+            System.out.println("⚠️ ProductTracker no inicializado");
+            return;
+        }
+
+        if (mejorSolucion == null || mejorSolucion.isEmpty()) {
+            System.out.println("⚠️ No hay solución para rastrear productos");
+            return;
+        }
+
+        // Extraer el mapa de solución interno (mejorSolucion es un Map<HashMap<Pedido,ArrayList<Vuelo>>, Integer>)
+        HashMap<Pedido, ArrayList<Vuelo>> solucionActual = mejorSolucion.keySet().iterator().next();
+        
+        if (solucionActual == null || solucionActual.isEmpty()) {
+            System.out.println("⚠️ No hay asignaciones en la mejor solución");
+            return;
+        }
+
+        int productosRastreados = 0;
+        
+        // Recorrer la MEJOR solución encontrada
+        for (Map.Entry<Pedido, ArrayList<Vuelo>> entry : solucionActual.entrySet()) {
+            Pedido pedido = entry.getKey();
+            ArrayList<Vuelo> ruta = entry.getValue();
+            
+            // Asignar TODOS los productos de este pedido a su ruta
+            List<Producto> productos = pedido.getProductos();
+            if (productos != null && !productos.isEmpty()) {
+                for (Producto producto : productos) {
+                    if (producto != null && producto.getId() != null) {
+                        productTracker.assignProductToRoute(producto, ruta);
+                        productosRastreados++;
+                    }
+                }
+            }
+        }
+        
+        System.out.println("✓ Productos rastreados: " + productosRastreados);
     }
 
     private List<Pedido> expandirPaquetesAUnidadesProducto(List<Pedido> pedidosOriginales) {

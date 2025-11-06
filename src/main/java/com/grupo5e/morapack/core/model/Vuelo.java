@@ -1,5 +1,6 @@
 package com.grupo5e.morapack.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -19,6 +20,7 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @Entity
 @Table(name = "vuelos")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "rutas"})
 public class Vuelo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

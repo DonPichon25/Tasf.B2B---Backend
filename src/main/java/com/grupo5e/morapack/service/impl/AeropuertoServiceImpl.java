@@ -22,13 +22,35 @@ public class AeropuertoServiceImpl implements AeropuertoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Aeropuerto> listar() {
-        return aeropuertoRepository.findAll();
+        List<Aeropuerto> aeropuertos = aeropuertoRepository.findAll();
+        // Forzar inicialización de relaciones LAZY (Almacen y Ciudad)
+        aeropuertos.forEach(a -> {
+            if (a.getAlmacen() != null) {
+                a.getAlmacen().getCapacidadUsada();
+            }
+            if (a.getCiudad() != null) {
+                a.getCiudad().getCodigo(); // Fuerza inicialización de Ciudad
+            }
+        });
+        return aeropuertos;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Aeropuerto> listarDisponibles() {
-        return aeropuertoRepository.findByEstado(EstadoAeropuerto.DISPONIBLE);
+        List<Aeropuerto> aeropuertos = aeropuertoRepository.findByEstado(EstadoAeropuerto.DISPONIBLE);
+        // Forzar inicialización de relaciones LAZY (Almacen y Ciudad)
+        aeropuertos.forEach(a -> {
+            if (a.getAlmacen() != null) {
+                a.getAlmacen().getCapacidadUsada();
+            }
+            if (a.getCiudad() != null) {
+                a.getCiudad().getCodigo(); // Fuerza inicialización de Ciudad
+            }
+        });
+        return aeropuertos;
     }
 
     @Override
@@ -67,13 +89,35 @@ public class AeropuertoServiceImpl implements AeropuertoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Aeropuerto buscarPorId(Integer id) {
-        return aeropuertoRepository.findById(id).orElse(null);
+        Aeropuerto aeropuerto = aeropuertoRepository.findById(id).orElse(null);
+        if (aeropuerto != null) {
+            // Forzar inicialización de relaciones LAZY
+            if (aeropuerto.getAlmacen() != null) {
+                aeropuerto.getAlmacen().getCapacidadUsada();
+            }
+            if (aeropuerto.getCiudad() != null) {
+                aeropuerto.getCiudad().getCodigo();
+            }
+        }
+        return aeropuerto;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Aeropuerto> buscarPorCodigoIATA(String codigoIATA) {
-        return aeropuertoRepository.findByCodigoIATA(codigoIATA);
+        Optional<Aeropuerto> aeropuerto = aeropuertoRepository.findByCodigoIATA(codigoIATA);
+        aeropuerto.ifPresent(a -> {
+            // Forzar inicialización de relaciones LAZY
+            if (a.getAlmacen() != null) {
+                a.getAlmacen().getCapacidadUsada();
+            }
+            if (a.getCiudad() != null) {
+                a.getCiudad().getCodigo();
+            }
+        });
+        return aeropuerto;
     }
 
     @Override

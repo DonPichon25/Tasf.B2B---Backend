@@ -1,6 +1,7 @@
 package com.grupo5e.morapack.service;
 
 import com.grupo5e.morapack.core.model.Aeropuerto;
+import com.grupo5e.morapack.core.model.Almacen;
 import com.grupo5e.morapack.core.model.Ciudad;
 import com.grupo5e.morapack.core.model.Vuelo;
 import com.grupo5e.morapack.core.validation.EntityValidator;
@@ -10,6 +11,7 @@ import com.grupo5e.morapack.repository.ClienteRepository;
 import com.grupo5e.morapack.repository.ProductoRepository;
 import com.grupo5e.morapack.utils.LectorAeropuerto;
 import com.grupo5e.morapack.utils.LectorPedidos;
+import com.grupo5e.morapack.utils.LectorPedidosV2;
 import com.grupo5e.morapack.utils.LectorVuelos;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -139,35 +142,75 @@ public class DataImportService {
                 }
             }
             
-            // 5. Guardar aeropuertos en BD (IDs auto-generados)
-            List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertos);
+            // 5. Verificar si ya existen aeropuertos y filtrar duplicados
+            log.info("   🔍 Verificando aeropuertos existentes...");
+            List<Aeropuerto> aeropuertosExistentes = aeropuertoService.listar();
+            Set<String> codigosExistentes = aeropuertosExistentes.stream()
+                .map(Aeropuerto::getCodigoIATA)
+                .collect(Collectors.toSet());
             
-            // 6. Crear almacenes para cada aeropuerto (siguiendo patrón Backend)
-            List<com.grupo5e.morapack.core.model.Almacen> almacenes = new ArrayList<>();
-            for (Aeropuerto aeropuerto : aeropuertosGuardados) {
-                com.grupo5e.morapack.core.model.Almacen almacen = com.grupo5e.morapack.core.model.Almacen.builder()
-                    .nombre("Almacen " + aeropuerto.getCodigoIATA())
-                    .capacidadMaxima(1000) // Capacidad por defecto
-                    .capacidadUsada(0)
-                    .esAlmacenPrincipal(false)
-                    .build();
-                almacenes.add(almacen);
+            List<Aeropuerto> aeropuertosNuevos = aeropuertos.stream()
+                .filter(a -> !codigosExistentes.contains(a.getCodigoIATA()))
+                .collect(Collectors.toList());
+            
+            if (aeropuertosNuevos.isEmpty()) {
+                log.warn("   ⚠️ Todos los aeropuertos ya existen en BD. Saltando inserción.");
+                log.info("   ℹ️ Si deseas re-importar, primero limpia la base de datos.");
+                
+                // Retornar resultado exitoso sin insertar duplicados
+                result.put("success", true);
+                result.put("message", "Aeropuertos ya existen en base de datos. No se insertaron duplicados.");
+                result.put("count", aeropuertosExistentes.size());
+                result.put("cities", (int) ciudadesGuardadas.stream().count());
+                
+                return result;
             }
             
-            List<com.grupo5e.morapack.core.model.Almacen> almacenesGuardados = almacenRepository.saveAll(almacenes);
-            log.info("   ✅ {} almacenes creados para aeropuertos", almacenesGuardados.size());
+            log.info("   ✅ {} aeropuertos nuevos a insertar (de {} totales)", 
+                aeropuertosNuevos.size(), aeropuertos.size());
             
-            // 7. Asociar almacenes a aeropuertos (bidireccional)
-            for (int i = 0; i < aeropuertosGuardados.size(); i++) {
-                Aeropuerto aero = aeropuertosGuardados.get(i);
+            // 6. Extraer y guardar almacenes de aeropuertos nuevos
+            // NOTA: LectorAeropuerto ya creó los almacenes con capacidades correctas
+            List<com.grupo5e.morapack.core.model.Almacen> almacenes = new ArrayList<>();
+            for (Aeropuerto aeropuerto : aeropuertosNuevos) {
+                Almacen almacen = aeropuerto.getAlmacen();
+                if (almacen != null) {
+                    // Asegurarse de que el almacén no tiene ID (será generado por BD)
+                    almacen.setId(null);
+                    almacenes.add(almacen);
+                } else {
+                    // Fallback: crear almacén con capacidad por defecto si no existe
+                    log.warn("   ⚠️ Aeropuerto {} no tiene almacén, creando con capacidad por defecto", 
+                        aeropuerto.getCodigoIATA());
+                    Almacen almacenNuevo = Almacen.builder()
+                        .nombre("Almacen " + aeropuerto.getCodigoIATA())
+                        .capacidadMaxima(1000)
+                        .capacidadUsada(0)
+                        .esAlmacenPrincipal(false)
+                        .build();
+                    almacenes.add(almacenNuevo);
+                    aeropuerto.setAlmacen(almacenNuevo);
+                }
+            }
+            
+            // 7. Guardar almacenes en BD (esto les asigna IDs)
+            List<com.grupo5e.morapack.core.model.Almacen> almacenesGuardados = almacenRepository.saveAll(almacenes);
+            log.info("   ✅ {} almacenes guardados (con capacidades del archivo)", almacenesGuardados.size());
+            
+            // 8. Actualizar aeropuertos con referencias a almacenes guardados (con IDs)
+            for (int i = 0; i < aeropuertosNuevos.size(); i++) {
+                Aeropuerto aero = aeropuertosNuevos.get(i);
                 com.grupo5e.morapack.core.model.Almacen alm = almacenesGuardados.get(i);
                 // Establecer relación bidireccional
                 aero.setAlmacen(alm);
                 alm.setAeropuerto(aero);
             }
-            // Re-guardar para persistir la relación
+            
+            // 9. Guardar aeropuertos con almacenes asociados
+            List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertosNuevos);
+            
+            // 10. Re-guardar almacenes para persistir la relación bidireccional
             almacenRepository.saveAll(almacenesGuardados);
-            aeropuertoService.insertarBulk(aeropuertosGuardados);
             
             result.put("success", true);
             result.put("message", "Aeropuertos y almacenes importados exitosamente");
@@ -292,18 +335,25 @@ public class DataImportService {
     /**
      * Importa pedidos desde archivo .txt y los guarda en BD inmediatamente
      * Requiere que existan aeropuertos en BD
-     * NOTA: LectorPedidos ya guarda en BD internamente usando pedidoService
      * 
-     * @param file Archivo pedidos.txt
+     * SOPORTA DOS FORMATOS:
+     * - Formato V1: Líneas separadas por espacios (LectorPedidos)
+     * - Formato V2: id_pedido-aaaammdd-hh-mm-dest-###-IdClien (LectorPedidosV2)
+     * 
+     * @param file Archivo pedidos.txt o _pedidos_{AIRPORT}_.txt
+     * @param horaInicio Opcional: solo cargar pedidos después de esta hora
+     * @param horaFin Opcional: solo cargar pedidos antes de esta hora
      * @return Map con success, message, count
      */
     @Transactional
-    public Map<String, Object> importOrders(MultipartFile file) {
+    public Map<String, Object> importOrders(MultipartFile file, LocalDateTime horaInicio, LocalDateTime horaFin) {
         Map<String, Object> result = new HashMap<>();
         Path tempFile = null;
+        Path tempDir = null;
         
         try {
-            log.info("📦 Iniciando importación de pedidos...");
+            log.info("📦 Iniciando importación de pedidos desde frontend...");
+            log.info("   Archivo: {} ({} MB)", file.getOriginalFilename(), file.getSize() / (1024.0 * 1024.0));
             
             // 1. Verificar que existan aeropuertos en BD
             List<Aeropuerto> aeropuertos = aeropuertoService.listar();
@@ -321,28 +371,87 @@ public class DataImportService {
             int countAntes = pedidoService.listar().size();
             log.info("   Pedidos en BD antes de importar: {}", countAntes);
             
-            // 3. Guardar archivo temporal y usar LectorPedidos
-            // NOTA: LectorPedidos ya guarda en BD directamente usando pedidoService.insertar()
+            // 3. Guardar archivo temporal
             tempFile = guardarArchivoTemporal(file);
-            LectorPedidos lector = new LectorPedidos(
-                tempFile.toString(),
-                new ArrayList<>(aeropuertos),
-                pedidoService,
-                clienteService
-            );
-            lector.leerYGuardarProductos();
             
-            // 4. Contar pedidos después de importar
-            int countDespues = pedidoService.listar().size();
-            int pedidosImportados = countDespues - countAntes;
+            // 4. DETECTAR FORMATO del archivo leyendo la primera línea
+            String primeraLinea = detectarFormatoArchivo(tempFile);
+            boolean esFormatoV2 = primeraLinea.contains("-") && primeraLinea.split("-").length >= 6;
             
-            log.info("   Pedidos en BD después de importar: {}", countDespues);
-            
-            result.put("success", true);
-            result.put("message", "Pedidos importados exitosamente");
-            result.put("count", pedidosImportados);
-            
-            log.info("✅ {} pedidos importados", pedidosImportados);
+            if (esFormatoV2) {
+                log.info("   📋 Formato detectado: V2 (id-fecha-hora-dest-cant-cliente)");
+                log.info("   ⚠️ Archivo V2 detectado, usando LectorPedidosV2...");
+                
+                if (horaInicio != null && horaFin != null) {
+                    log.info("   🕒 Filtrando pedidos por ventana de tiempo:");
+                    log.info("      Inicio: {}", horaInicio);
+                    log.info("      Fin: {}", horaFin);
+                } else {
+                    log.info("   📦 Cargando TODOS los pedidos del archivo (sin filtrado)");
+                }
+                
+                // Crear directorio temporal y copiar archivo ahí
+                tempDir = Files.createTempDirectory("morapack-pedidos-");
+                Path archivoEnDir = tempDir.resolve(file.getOriginalFilename());
+                Files.copy(tempFile, archivoEnDir, StandardCopyOption.REPLACE_EXISTING);
+                
+                // Usar LectorPedidosV2 que parsea fechas correctamente
+                LectorPedidosV2 lectorV2 = new LectorPedidosV2(
+                    tempDir.toString(),
+                    new ArrayList<>(aeropuertos),
+                    pedidoService,
+                    clienteService
+                );
+                
+                // Cargar con filtros de tiempo si se especificaron
+                LectorPedidosV2.ResultadoCargaPedidos resultadoCarga = 
+                    lectorV2.leerYGuardarPedidos(horaInicio, horaFin);
+                
+                if (!resultadoCarga.exito) {
+                    result.put("success", false);
+                    result.put("message", "Error cargando pedidos: " + resultadoCarga.mensajeError);
+                    result.put("count", 0);
+                    log.error("❌ {}", resultadoCarga.mensajeError);
+                    return result;
+                }
+                
+                result.put("success", true);
+                result.put("message", "Pedidos importados exitosamente (Formato V2 con fechas)");
+                result.put("count", resultadoCarga.pedidosCreados);
+                result.put("pedidosCargados", resultadoCarga.pedidosCargados);
+                result.put("pedidosFiltrados", resultadoCarga.pedidosFiltrados);
+                result.put("erroresParseo", resultadoCarga.erroresParseo);
+                
+                log.info("✅ {} pedidos importados (V2)", resultadoCarga.pedidosCreados);
+                log.info("   📊 Cargados: {}, Filtrados: {}, Errores: {}", 
+                    resultadoCarga.pedidosCargados, 
+                    resultadoCarga.pedidosFiltrados,
+                    resultadoCarga.erroresParseo);
+                
+            } else {
+                log.info("   📋 Formato detectado: V1 (separado por espacios)");
+                
+                // Usar LectorPedidos (formato viejo)
+                LectorPedidos lector = new LectorPedidos(
+                    tempFile.toString(),
+                    new ArrayList<>(aeropuertos),
+                    pedidoService,
+                    clienteService
+                );
+                lector.leerYGuardarProductos();
+                
+                // 4. Contar pedidos después de importar
+                int countDespues = pedidoService.listar().size();
+                int pedidosImportados = countDespues - countAntes;
+                
+                log.info("   Pedidos en BD después de importar: {}", countDespues);
+                
+                result.put("success", true);
+                result.put("message", "Pedidos importados exitosamente (Formato V1)");
+                result.put("count", pedidosImportados);
+                
+                log.info("✅ {} pedidos importados (V1)", pedidosImportados);
+            }
             
         } catch (Exception e) {
             log.error("❌ Error importando pedidos", e);
@@ -351,9 +460,41 @@ public class DataImportService {
             result.put("error", e.getClass().getSimpleName());
         } finally {
             eliminarArchivoTemporal(tempFile);
+            if (tempDir != null) {
+                try {
+                    // Eliminar archivos dentro del directorio temporal
+                    Files.walk(tempDir)
+                        .sorted(Comparator.reverseOrder())
+                        .forEach(path -> {
+                            try {
+                                Files.deleteIfExists(path);
+                            } catch (IOException e) {
+                                log.warn("No se pudo eliminar archivo temporal: {}", path);
+                            }
+                        });
+                } catch (IOException e) {
+                    log.warn("Error limpiando directorio temporal: {}", e.getMessage());
+                }
+            }
         }
         
         return result;
+    }
+    
+    /**
+     * Detecta el formato del archivo leyendo la primera línea no vacía
+     */
+    private String detectarFormatoArchivo(Path archivo) throws IOException {
+        try (BufferedReader reader = Files.newBufferedReader(archivo)) {
+            String linea;
+            while ((linea = reader.readLine()) != null) {
+                linea = linea.trim();
+                if (!linea.isEmpty()) {
+                    return linea;
+                }
+            }
+        }
+        return "";
     }
 
     // ========== DATABASE STATISTICS ==========

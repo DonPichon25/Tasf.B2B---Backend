@@ -39,28 +39,41 @@ public class FabricaFuenteDatos {
      * @return FuenteDatosInput (FuenteDatosArchivo o FuenteDatosBaseDatos)
      */
     public static FuenteDatosInput crearFuenteDatos() {
+        System.out.println("═══════════════════════════════════════════════════════");
+        System.out.println("🏭 [FABRICA] Creando FuenteDatosInput");
+        
         // ✅ Usar System.getProperty() en lugar de System.getenv()
         // porque AlgoritmoController usa System.setProperty()
         String modo = System.getProperty("MODO_FUENTE_DATOS");
+        System.out.println("🏭 [FABRICA] System.getProperty('MODO_FUENTE_DATOS') = " + modo);
+        
         if (modo == null) {
             modo = "ARCHIVO"; // Modo por defecto
+            System.out.println("🏭 [FABRICA] ⚠️ Modo era null, usando default: ARCHIVO");
         }
         
-        System.out.println("[FABRICA] Creando fuente de datos para modo: " + modo);
+        System.out.println("🏭 [FABRICA] Modo final: [" + modo + "]");
+        System.out.println("🏭 [FABRICA] Spring Context disponible: " + (springContext != null));
         
         if ("BASEDATOS".equals(modo) || "BASE_DE_DATOS".equals(modo)) {
+            System.out.println("🏭 [FABRICA] ✅ Modo coincide con BASEDATOS/BASE_DE_DATOS");
             if (springContext != null) {
-                System.out.println("[FABRICA] ✅ Usando fuente de datos BASEDATOS (H2/PostgreSQL)");
-                return springContext.getBean(FuenteDatosBaseDatos.class);
+                System.out.println("🏭 [FABRICA] ✅ Usando fuente de datos BASEDATOS (H2/PostgreSQL)");
+                FuenteDatosBaseDatos bean = springContext.getBean(FuenteDatosBaseDatos.class);
+                System.out.println("🏭 [FABRICA] Bean obtenido: " + bean.getClass().getSimpleName());
+                System.out.println("═══════════════════════════════════════════════════════");
+                return bean;
             } else {
-                System.err.println("[FABRICA] ⚠️ ADVERTENCIA: Modo BASEDATOS seleccionado pero Spring no disponible");
-                System.err.println("[FABRICA] Recurriendo a modo ARCHIVO");
+                System.err.println("🏭 [FABRICA] ❌ ADVERTENCIA: Modo BASEDATOS seleccionado pero Spring Context NO disponible");
+                System.err.println("🏭 [FABRICA] Recurriendo a modo ARCHIVO");
+                System.out.println("═══════════════════════════════════════════════════════");
                 return new FuenteDatosArchivo();
             }
         }
         
         // Modo ARCHIVO (por defecto)
-        System.out.println("[FABRICA] Usando fuente de datos ARCHIVO (data/*.txt)");
+        System.out.println("🏭 [FABRICA] Usando fuente de datos ARCHIVO (data/*.txt)");
+        System.out.println("═══════════════════════════════════════════════════════");
         return new FuenteDatosArchivo();
     }
     

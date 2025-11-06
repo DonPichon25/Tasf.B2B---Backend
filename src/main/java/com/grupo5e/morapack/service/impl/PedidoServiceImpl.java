@@ -87,4 +87,16 @@ public class PedidoServiceImpl implements PedidoService {
     public List<Pedido> insertarBulk(List<Pedido> pedidos) {
         return pedidoRepository.saveAll(pedidos).stream().collect(Collectors.toList());
     }
+    
+    /**
+     * OPTIMIZACIÓN: Buscar múltiples pedidos por IDs en una sola query.
+     * Usa findAllById() de JpaRepository que genera un query eficiente con IN clause.
+     */
+    @Override
+    public List<Pedido> buscarPorIds(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return pedidoRepository.findAllById(ids);
+    }
 }

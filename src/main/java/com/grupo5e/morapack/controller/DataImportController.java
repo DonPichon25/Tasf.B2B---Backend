@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -149,7 +150,9 @@ public class DataImportController {
      */
     @Operation(
         summary = "Importar pedidos",
-        description = "Importa pedidos desde archivo .txt y los guarda en BD inmediatamente. Requiere aeropuertos previamente importados."
+        description = "Importa pedidos desde archivo .txt y los guarda en BD inmediatamente. " +
+                      "Opcionalmente filtra por ventana de tiempo para escenarios diario/semanal. " +
+                      "Requiere aeropuertos previamente importados."
     )
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Pedidos importados exitosamente"),
@@ -157,11 +160,19 @@ public class DataImportController {
     })
     @PostMapping(value = "/orders", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, Object>> uploadOrders(
-            @Parameter(description = "Archivo pedidos.txt")
-            @RequestParam("file") MultipartFile file) {
+            @Parameter(description = "Archivo pedidos.txt o _pedidos_{AIRPORT}_.txt")
+            @RequestParam("file") MultipartFile file,
+            @Parameter(description = "Hora de inicio para filtrar pedidos (ISO 8601, opcional)", example = "2025-01-02T00:00:00")
+            @RequestParam(required = false) String horaInicio,
+            @Parameter(description = "Hora de fin para filtrar pedidos (ISO 8601, opcional)", example = "2025-01-09T00:00:00")
+            @RequestParam(required = false) String horaFin) {
         
         String filename = file.getOriginalFilename();
         log.info("📤 Recibida solicitud de importación de pedidos: {}", filename);
+        
+        if (horaInicio != null && horaFin != null) {
+            log.info("   🕒 Ventana de tiempo: {} a {}", horaInicio, horaFin);
+        }
         
         // Validar archivo básico
         if (file.isEmpty()) {
@@ -180,14 +191,36 @@ public class DataImportController {
             return ResponseEntity.badRequest().body(error);
         }
         
-        // Procesar e insertar en BD
-        Map<String, Object> result = dataImportService.importOrders(file);
+        // Parsear fechas si se proporcionaron
+        LocalDateTime horaInicioDateTime = null;
+        LocalDateTime horaFinDateTime = null;
+        
+        try {
+            if (horaInicio != null && !horaInicio.isEmpty()) {
+                horaInicioDateTime = LocalDateTime.parse(horaInicio);
+            }
+            if (horaFin != null && !horaFin.isEmpty()) {
+                horaFinDateTime = LocalDateTime.parse(horaFin);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Formato de fecha inválido. Use ISO 8601: yyyy-MM-ddTHH:mm:ss");
+            log.warn("❌ Error parseando fechas: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+        
+        // Procesar e insertar en BD con filtrado opcional
+        Map<String, Object> result = dataImportService.importOrders(file, horaInicioDateTime, horaFinDateTime);
         
         boolean success = (boolean) result.get("success");
         HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
         
         if (success) {
             log.info("✅ Pedidos importados: {}", result.get("count"));
+            if (result.containsKey("pedidosFiltrados")) {
+                log.info("   📊 Pedidos filtrados (fuera de ventana): {}", result.get("pedidosFiltrados"));
+            }
         } else {
             log.error("❌ Error importando pedidos: {}", result.get("message"));
         }

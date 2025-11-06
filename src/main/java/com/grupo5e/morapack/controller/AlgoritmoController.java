@@ -61,21 +61,41 @@ public class AlgoritmoController {
         
         try {
             // 1. Configurar fuente de datos según solicitud
-            String fuente = (solicitud != null && solicitud.getFuente() != null) 
-                ? solicitud.getFuente() : "BASE_DE_DATOS";
+            log.info("📥 Solicitud recibida: {}", solicitud);
             
-            log.info("   Fuente de datos solicitada: {}", fuente);
+            Boolean usarBaseDatos = (solicitud != null && solicitud.getUsarBaseDatos() != null) 
+                ? solicitud.getUsarBaseDatos() : true;
+            
+            String fuente = usarBaseDatos ? "BASE_DE_DATOS" : "ARCHIVO";
+            
+            log.info("🔧 Fuente de datos configurada: [{}]", fuente);
+            log.debug("Configurando System Property MODO_FUENTE_DATOS = {}", fuente);
             
             // Configurar variable de entorno para la fuente de datos
             System.setProperty("MODO_FUENTE_DATOS", fuente);
             
+            // Verificar que se guardó correctamente
+            String fuenteGuardada = System.getProperty("MODO_FUENTE_DATOS");
+            log.debug("System Property guardada = {}", fuenteGuardada);
+            
             // 2. Crear instancia de ALNSSolver con configuración
-            int iteraciones = (solicitud != null && solicitud.getIteraciones() != null) 
-                ? solicitud.getIteraciones() : 500;
+            int iteraciones = (solicitud != null && solicitud.getMaxIteraciones() != null) 
+                ? solicitud.getMaxIteraciones() : 500;
             
             // Pasar ApplicationContext para que pueda usar servicios de Spring cuando fuente=BASE_DE_DATOS
+            log.debug("Configurando Spring Context en FabricaFuenteDatos");
             com.grupo5e.morapack.algorithm.input.FabricaFuenteDatos.setSpringContext(applicationContext);
-            ALNSSolver solver = new ALNSSolver(iteraciones);
+            
+            log.info("Iteraciones configuradas: {}", iteraciones);
+            
+            // Extraer ventanas de tiempo si existen
+            LocalDateTime horaInicioSimulacion = (solicitud != null) ? solicitud.getHoraInicioSimulacion() : null;
+            LocalDateTime horaFinSimulacion = (solicitud != null) ? solicitud.getHoraFinSimulacion() : null;
+            
+            // Usar constructor con soporte de ventanas de tiempo
+            log.info("Creando ALNSSolver con {} iteraciones{}", iteraciones,
+                (horaInicioSimulacion != null ? " y ventana de tiempo" : ""));
+            ALNSSolver solver = new ALNSSolver(iteraciones, horaInicioSimulacion, horaFinSimulacion);
             
             // 3. Ejecutar el algoritmo
             log.info("   Iteraciones configuradas: {}", iteraciones);
@@ -236,6 +256,189 @@ public class AlgoritmoController {
     }
     
     /**
+     * ESCENARIO DIARIO: Ejecutar algoritmo ALNS para ventana incremental de tiempo (ej: cada 30 minutos).
+     * POST /api/algoritmo/diario
+     * 
+     * Uso típico:
+     * - Simulación en tiempo real continua
+     * - Frontend llama cada ~30 minutos de simulación
+     * - Carga solo pedidos dentro de la ventana de tiempo
+     * - Retorna rutas para este segmento de tiempo
+     * - Se ejecuta indefinidamente hasta detenerse
+     */
+    @Operation(
+        summary = "Ejecutar algoritmo ALNS - Escenario Diario",
+        description = "Ejecuta el algoritmo ALNS para un escenario diario con ventanas incrementales " +
+                      "(típicamente 30 minutos). Diseñado para operaciones en tiempo real."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Algoritmo ejecutado exitosamente",
+            content = @Content(schema = @Schema(implementation = ResultadoAlgoritmoDTO.class))
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Parámetros de solicitud inválidos"
+        ),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Error durante la ejecución del algoritmo"
+        )
+    })
+    @PostMapping("/diario")
+    public ResponseEntity<ResultadoAlgoritmoDTO> ejecutarEscenarioDiario(
+            @RequestBody(required = false) AlnsRequestDTO solicitud) {
+        
+        LocalDateTime horaInicio = LocalDateTime.now();
+        log.info("🚀 Ejecutando algoritmo ALNS - ESCENARIO DIARIO - Inicio: {}", horaInicio);
+        
+        try {
+            // Validar solicitud
+            if (solicitud == null) {
+                solicitud = AlnsRequestDTO.builder()
+                    .usarBaseDatos(true)
+                    .build();
+            }
+            
+            if (solicitud.getHoraInicioSimulacion() == null) {
+                ResultadoAlgoritmoDTO resultadoError = ResultadoAlgoritmoDTO.builder()
+                    .exitoso(false)
+                    .mensaje("Error: horaInicioSimulacion es requerida para escenario diario")
+                    .horaInicio(horaInicio)
+                    .horaFin(LocalDateTime.now())
+                    .build();
+                return ResponseEntity.badRequest().body(resultadoError);
+            }
+            
+            // Calcular ventana de tiempo (por defecto 30 minutos si no se especifica)
+            if (solicitud.getHoraFinSimulacion() == null) {
+                if (solicitud.getDuracionSimulacionHoras() == null && solicitud.getDuracionSimulacionDias() == null) {
+                    solicitud.setDuracionSimulacionHoras(0.5); // 30 minutos por defecto
+                }
+                
+                LocalDateTime horaFin;
+                if (solicitud.getDuracionSimulacionHoras() != null) {
+                    long minutos = (long) (solicitud.getDuracionSimulacionHoras() * 60);
+                    horaFin = solicitud.getHoraInicioSimulacion().plusMinutes(minutos);
+                } else {
+                    horaFin = solicitud.getHoraInicioSimulacion().plusDays(solicitud.getDuracionSimulacionDias());
+                }
+                solicitud.setHoraFinSimulacion(horaFin);
+            }
+            
+            log.info("Ventana de tiempo: {} a {}", 
+                solicitud.getHoraInicioSimulacion(), solicitud.getHoraFinSimulacion());
+            
+            // Ejecutar algoritmo
+            return ejecutarAlgoritmo(solicitud);
+            
+        } catch (Exception e) {
+            log.error("❌ Error ejecutando escenario diario", e);
+            
+            ResultadoAlgoritmoDTO resultadoError = ResultadoAlgoritmoDTO.builder()
+                .exitoso(false)
+                .mensaje("Error durante la ejecución del escenario diario: " + e.getMessage())
+                .horaInicio(horaInicio)
+                .horaFin(LocalDateTime.now())
+                .build();
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resultadoError);
+        }
+    }
+    
+    /**
+     * ESCENARIO SEMANAL: Ejecutar algoritmo ALNS para simulación de 7 días completa.
+     * POST /api/algoritmo/semanal
+     * 
+     * Uso típico:
+     * - Frontend llama una vez con rango de 7 días
+     * - Carga todos los pedidos de la semana
+     * - Retorna solución completa para 7 días
+     * - Debería ejecutarse en 30-90 minutos (según requerimientos)
+     */
+    @Operation(
+        summary = "Ejecutar algoritmo ALNS - Escenario Semanal",
+        description = "Ejecuta el algoritmo ALNS para un escenario semanal completo de 7 días. " +
+                      "Procesa toda la semana en una sola ejecución. " +
+                      "Tiempo esperado: 30-90 minutos."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Algoritmo ejecutado exitosamente",
+            content = @Content(schema = @Schema(implementation = ResultadoAlgoritmoDTO.class))
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Parámetros de solicitud inválidos"
+        ),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Error durante la ejecución del algoritmo"
+        )
+    })
+    @PostMapping("/semanal")
+    public ResponseEntity<ResultadoAlgoritmoDTO> ejecutarEscenarioSemanal(
+            @RequestBody(required = false) AlnsRequestDTO solicitud) {
+        
+        LocalDateTime horaInicio = LocalDateTime.now();
+        log.info("🚀 Ejecutando algoritmo ALNS - ESCENARIO SEMANAL - Inicio: {}", horaInicio);
+        
+        try {
+            // Validar solicitud
+            if (solicitud == null) {
+                solicitud = AlnsRequestDTO.builder()
+                    .usarBaseDatos(true)
+                    .build();
+            }
+            
+            if (solicitud.getHoraInicioSimulacion() == null) {
+                ResultadoAlgoritmoDTO resultadoError = ResultadoAlgoritmoDTO.builder()
+                    .exitoso(false)
+                    .mensaje("Error: horaInicioSimulacion es requerida para escenario semanal")
+                    .horaInicio(horaInicio)
+                    .horaFin(LocalDateTime.now())
+                    .build();
+                return ResponseEntity.badRequest().body(resultadoError);
+            }
+            
+            // Forzar duración de 7 días si no se especifica
+            if (solicitud.getDuracionSimulacionDias() == null) {
+                solicitud.setDuracionSimulacionDias(7);
+            }
+            
+            // Calcular ventana de tiempo
+            if (solicitud.getHoraFinSimulacion() == null) {
+                solicitud.setHoraFinSimulacion(
+                    solicitud.getHoraInicioSimulacion().plusDays(solicitud.getDuracionSimulacionDias())
+                );
+            }
+            
+            log.info("Ventana de tiempo: {} a {} ({} días)", 
+                solicitud.getHoraInicioSimulacion(), 
+                solicitud.getHoraFinSimulacion(),
+                solicitud.getDuracionSimulacionDias());
+            log.info("⚠️ ADVERTENCIA: La ejecución semanal puede tomar 30-90 minutos");
+            
+            // Ejecutar algoritmo
+            return ejecutarAlgoritmo(solicitud);
+            
+        } catch (Exception e) {
+            log.error("❌ Error ejecutando escenario semanal", e);
+            
+            ResultadoAlgoritmoDTO resultadoError = ResultadoAlgoritmoDTO.builder()
+                .exitoso(false)
+                .mensaje("Error durante la ejecución del escenario semanal: " + e.getMessage())
+                .horaInicio(horaInicio)
+                .horaFin(LocalDateTime.now())
+                .build();
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resultadoError);
+        }
+    }
+    
+    /**
      * Genera timeline temporal de simulación con eventos de vuelos.
      * OPTIMIZADO: Agrupa vuelos por ruta para evitar duplicados.
      * 
@@ -393,6 +596,7 @@ public class AlgoritmoController {
             .horaFinSimulacion(horaFin)
             .duracionTotalMinutos(duracionMinutos)
             .eventos(eventos)
+            .totalEventos(eventos.size())  // ✅ Total de eventos para el frontend
             .rutasProductos(rutasProductos)
             .totalProductos(rutasProductos.size())
             .totalVuelos(gruposVuelos.size())

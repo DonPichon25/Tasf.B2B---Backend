@@ -1,5 +1,6 @@
 package com.grupo5e.morapack.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.grupo5e.morapack.core.enums.EstadoAeropuerto;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -13,6 +14,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Entity
 @Table(name = "aeropuertos")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Aeropuerto {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -16,4 +16,10 @@ public interface PedidoService {
     void eliminar(Integer id);
     boolean existePorId(Integer id);
     List<Pedido> insertarBulk(List<Pedido> pedidos);
+    
+    /**
+     * OPTIMIZACIÓN: Buscar múltiples pedidos por IDs en una sola query.
+     * Más eficiente que llamar buscarPorId() N veces.
+     */
+    List<Pedido> buscarPorIds(List<Integer> ids);
 }

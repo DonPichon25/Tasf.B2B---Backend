@@ -1,5 +1,6 @@
 package com.grupo5e.morapack.algorithm.alns;
 
+import com.grupo5e.morapack.core.constants.Constantes;
 import com.grupo5e.morapack.core.model.Aeropuerto;
 import com.grupo5e.morapack.core.model.Ciudad;
 import com.grupo5e.morapack.core.model.Pedido;
@@ -166,11 +167,51 @@ public class RouteValidator {
     }
 
     /**
-     * Valida capacidad de ruta para cantidad de productos
+     * Verifica si un aeropuerto es almacén principal (capacidad ilimitada).
+     * Lima, Bruselas (Brussels) y Baku tienen capacidad ILIMITADA.
+     * 
+     * @param aeropuerto Aeropuerto a verificar
+     * @return true si es almacén principal con capacidad ilimitada
+     */
+    private boolean esAlmacenPrincipal(Aeropuerto aeropuerto) {
+        if (aeropuerto == null || aeropuerto.getCiudad() == null) {
+            return false;
+        }
+        String nombreCiudad = aeropuerto.getCiudad().getNombre();
+        return Constantes.esAlmacenPrincipal(nombreCiudad);
+    }
+
+    /**
+     * Valida capacidad de ruta para cantidad de productos.
+     * 
+     * CRÍTICO: Los almacenes principales (Lima, Bruselas, Baku) tienen capacidad ILIMITADA.
+     * Esta validación NO se aplica a vuelos hacia/desde almacenes principales.
+     * 
+     * @param ruta Ruta a validar
+     * @param cantidadProductos Cantidad de productos a enviar
+     * @return true si la capacidad es válida
      */
     private boolean validateRouteCapacity(ArrayList<Vuelo> ruta, int cantidadProductos) {
         for (Vuelo vuelo : ruta) {
+            // CRÍTICO: Saltear validación si el destino es un almacén principal
+            if (esAlmacenPrincipal(vuelo.getAeropuertoDestino())) {
+                if (DEBUG_MODE) {
+                    System.out.println("  ✓ Almacén principal detectado: " + 
+                        vuelo.getAeropuertoDestino().getCiudad().getNombre() + 
+                        " - Capacidad ILIMITADA");
+                }
+                continue; // No validar capacidad en almacenes principales
+            }
+            
+            // Validar capacidad para aeropuertos regulares
             if (vuelo.getCapacidadUsada() + cantidadProductos > vuelo.getCapacidadMaxima()) {
+                if (DEBUG_MODE) {
+                    System.out.println("  ✗ Capacidad insuficiente en vuelo " + 
+                        vuelo.getIdentificadorVuelo() + 
+                        " (usado: " + vuelo.getCapacidadUsada() + 
+                        ", necesita: " + cantidadProductos + 
+                        ", max: " + vuelo.getCapacidadMaxima() + ")");
+                }
                 return false;
             }
         }
