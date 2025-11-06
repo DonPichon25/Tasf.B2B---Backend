@@ -29,6 +29,12 @@ public class VueloSimpleDTO {
     @Schema(description = "Código IATA del aeropuerto de destino", example = "EDDM")
     private String codigoDestino;
     
+    @Schema(description = "ID del aeropuerto de origen")
+    private Integer idAeropuertoOrigen;
+    
+    @Schema(description = "ID del aeropuerto de destino")
+    private Integer idAeropuertoDestino;
+    
     @Schema(description = "Hora de salida", example = "10:30")
     private LocalTime horaSalida;
     

@@ -231,6 +231,8 @@ public class AlgoritmoController {
                     .codigo(codigo)
                     .codigoOrigen(codigoOrigen)
                     .codigoDestino(codigoDestino)
+                    .idAeropuertoOrigen(v.getAeropuertoOrigen() != null ? v.getAeropuertoOrigen().getId() : null)
+                    .idAeropuertoDestino(v.getAeropuertoDestino() != null ? v.getAeropuertoDestino().getId() : null)
                     .horaSalida(v.getHoraSalida())
                     .horaLlegada(v.getHoraLlegada())
                     .tiempoTransporte(v.getTiempoTransporte())
@@ -472,9 +474,12 @@ public class AlgoritmoController {
             for (int i = 0; i < rutaProducto.getVuelos().size(); i++) {
                 VueloSimpleDTO vuelo = rutaProducto.getVuelos().get(i);
                 
-                // Rastrear aeropuertos
-                if (vuelo.getCodigoOrigen() != null) {
-                    aeropuertosSet.add(vuelo.getId()); // Simplificado
+                // Rastrear aeropuertos (igual que morapack-backend líneas 57-62)
+                if (vuelo.getIdAeropuertoOrigen() != null) {
+                    aeropuertosSet.add(vuelo.getIdAeropuertoOrigen());
+                }
+                if (vuelo.getIdAeropuertoDestino() != null) {
+                    aeropuertosSet.add(vuelo.getIdAeropuertoDestino());
                 }
                 
                 // Calcular tiempos de salida y llegada
@@ -550,8 +555,8 @@ public class AlgoritmoController {
                 .idPedido(grupo.idsPedidos.get(0))
                 .ciudadOrigen(vuelo.getCodigoOrigen())
                 .ciudadDestino(vuelo.getCodigoDestino())
-                .idAeropuertoOrigen(vuelo.getId()) // Simplificado
-                .idAeropuertoDestino(vuelo.getId())
+                .idAeropuertoOrigen(vuelo.getIdAeropuertoOrigen())
+                .idAeropuertoDestino(vuelo.getIdAeropuertoDestino())
                 .tiempoTransporteDias(vuelo.getTiempoTransporte() != null ? 
                     vuelo.getTiempoTransporte() / 24.0 : 0.0)
                 .build();
@@ -569,8 +574,8 @@ public class AlgoritmoController {
                 .idPedido(grupo.idsPedidos.get(0))
                 .ciudadOrigen(vuelo.getCodigoOrigen())
                 .ciudadDestino(vuelo.getCodigoDestino())
-                .idAeropuertoOrigen(vuelo.getId())
-                .idAeropuertoDestino(vuelo.getId())
+                .idAeropuertoOrigen(vuelo.getIdAeropuertoOrigen())
+                .idAeropuertoDestino(vuelo.getIdAeropuertoDestino())
                 .tiempoTransporteDias(vuelo.getTiempoTransporte() != null ? 
                     vuelo.getTiempoTransporte() / 24.0 : 0.0)
                 .build();

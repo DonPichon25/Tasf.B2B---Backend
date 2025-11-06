@@ -2,7 +2,6 @@ package com.grupo5e.morapack.utils;
 
 import com.grupo5e.morapack.core.model.Vuelo;
 import com.grupo5e.morapack.core.model.Aeropuerto;
-import com.grupo5e.morapack.core.constants.Constantes;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -29,6 +28,7 @@ public class LectorVuelos {
         try (BufferedReader reader = new BufferedReader(new FileReader(rutaArchivo))) {
             String linea;
             Map<String, Aeropuerto> mapaAeropuertos = crearMapaAeropuertos();
+            boolean primerLinea = true;
             
             while ((linea = reader.readLine()) != null) {
                 // Saltar líneas vacías
@@ -36,48 +36,106 @@ public class LectorVuelos {
                     continue;
                 }
                 
-                // Parsear datos del vuelo
-                // Formato: ORIGEN-DESTINO-SALIDA-LLEGADA-CAPACIDAD
-                String[] partes = linea.split("-");
-                if (partes.length == 5) {
-                    String codigoOrigen = partes[0];
-                    String codigoDestino = partes[1];
-                    String horaSalida = partes[2];
-                    String horaLlegada = partes[3];
-                    int capacidadMaxima = Integer.parseInt(partes[4]);
-                    
-                    // Buscar aeropuertos por código IATA
-                    Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(codigoOrigen);
-                    Aeropuerto aeropuertoDestino = mapaAeropuertos.get(codigoDestino);
-                    
-                    if (aeropuertoOrigen != null && aeropuertoDestino != null) {
-                        // Parsear horas para persistir en el modelo
-                        LocalTime horaSalidaParsed = parsearHora(horaSalida);
-                        LocalTime horaLlegadaParsed = parsearHora(horaLlegada);
+                // Saltar cabecera si existe
+                if (primerLinea && linea.contains("Codigo")) {
+                    primerLinea = false;
+                    continue;
+                }
+                primerLinea = false;
+                
+                // Intentar ambos formatos
+                // Formato 1 (CSV): Codigo,Ciudad-Origen,Ciudad-Destino,Hora-Salida,Hora-Llegada,Dias-Transporte,Cap-Max,Frecuencia-Diaria
+                // Formato 2 (antiguo): ORIGEN-DESTINO-SALIDA-LLEGADA-CAPACIDAD
+                
+                Vuelo vuelo = null;
+                
+                // Intentar formato CSV primero (comas)
+                if (linea.contains(",")) {
+                    String[] partes = linea.split(",");
+                    if (partes.length >= 7) {
+                        // partes[0] = codigo del vuelo (no usado, se genera automáticamente)
+                        String codigoOrigen = partes[1].trim();
+                        String codigoDestino = partes[2].trim();
+                        String horaSalida = partes[3].trim();
+                        String horaLlegada = partes[4].trim();
+                        double diasTransporte = Double.parseDouble(partes[5].trim());
+                        int capacidadMaxima = Integer.parseInt(partes[6].trim());
+                        double frecuencia = partes.length > 7 ? Double.parseDouble(partes[7].trim()) : 1.0;
                         
-                        // Calcular tiempo de transporte en horas
-                        double tiempoTransporte = calcularTiempoTransporte(horaSalida, horaLlegada);
+                        // Buscar aeropuertos por código IATA
+                        Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(codigoOrigen);
+                        Aeropuerto aeropuertoDestino = mapaAeropuertos.get(codigoDestino);
                         
-                        // Calcular costo (esto es un placeholder - podrías implementar un modelo de costo más sofisticado)
-                        double costo = calcularCostoVuelo(aeropuertoOrigen, aeropuertoDestino, capacidadMaxima);
-                        
-                        // Crear objeto Vuelo
-                        Vuelo vuelo = new Vuelo();
-                        // NO setear el ID manualmente, Hibernate lo genera automáticamente
-                        vuelo.setFrecuenciaPorDia(1.0); // Frecuencia por defecto
-                        vuelo.setAeropuertoOrigen(aeropuertoOrigen);
-                        vuelo.setAeropuertoDestino(aeropuertoDestino);
-                        vuelo.setCapacidadMaxima(capacidadMaxima);
-                        vuelo.setCapacidadUsada(0);
-                        vuelo.setTiempoTransporte(tiempoTransporte);
-                        vuelo.setCosto(costo);
-                        
-                        // Persistir horarios para identificación de vuelo
-                        vuelo.setHoraSalida(horaSalidaParsed);
-                        vuelo.setHoraLlegada(horaLlegadaParsed);
-                        
-                        vuelos.add(vuelo);
+                        if (aeropuertoOrigen != null && aeropuertoDestino != null) {
+                            // Parsear horas
+                            LocalTime horaSalidaParsed = parsearHora(horaSalida);
+                            LocalTime horaLlegadaParsed = parsearHora(horaLlegada);
+                            
+                            // Calcular tiempo de transporte en horas
+                            double tiempoTransporte = diasTransporte * 24.0;
+                            
+                            // Calcular costo
+                            double costo = calcularCostoVuelo(aeropuertoOrigen, aeropuertoDestino, capacidadMaxima);
+                            
+                            // Crear objeto Vuelo
+                            vuelo = new Vuelo();
+                            // El identificador se genera automáticamente via getIdentificadorVuelo()
+                            vuelo.setFrecuenciaPorDia(frecuencia);
+                            vuelo.setAeropuertoOrigen(aeropuertoOrigen);
+                            vuelo.setAeropuertoDestino(aeropuertoDestino);
+                            vuelo.setCapacidadMaxima(capacidadMaxima);
+                            vuelo.setCapacidadUsada(0);
+                            vuelo.setTiempoTransporte(tiempoTransporte);
+                            vuelo.setCosto(costo);
+                            vuelo.setHoraSalida(horaSalidaParsed);
+                            vuelo.setHoraLlegada(horaLlegadaParsed);
+                        } else {
+                            System.err.println("⚠️ Aeropuertos no encontrados para vuelo: " + codigoOrigen + " -> " + codigoDestino);
+                        }
                     }
+                } else {
+                    // Formato antiguo con guiones
+                    String[] partes = linea.split("-");
+                    if (partes.length == 5) {
+                        String codigoOrigen = partes[0];
+                        String codigoDestino = partes[1];
+                        String horaSalida = partes[2];
+                        String horaLlegada = partes[3];
+                        int capacidadMaxima = Integer.parseInt(partes[4]);
+                        
+                        // Buscar aeropuertos por código IATA
+                        Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(codigoOrigen);
+                        Aeropuerto aeropuertoDestino = mapaAeropuertos.get(codigoDestino);
+                        
+                        if (aeropuertoOrigen != null && aeropuertoDestino != null) {
+                            // Parsear horas
+                            LocalTime horaSalidaParsed = parsearHora(horaSalida);
+                            LocalTime horaLlegadaParsed = parsearHora(horaLlegada);
+                            
+                            // Calcular tiempo de transporte en horas
+                            double tiempoTransporte = calcularTiempoTransporte(horaSalida, horaLlegada);
+                            
+                            // Calcular costo
+                            double costo = calcularCostoVuelo(aeropuertoOrigen, aeropuertoDestino, capacidadMaxima);
+                            
+                            // Crear objeto Vuelo
+                            vuelo = new Vuelo();
+                            // El identificador se genera automáticamente via getIdentificadorVuelo()
+                            vuelo.setFrecuenciaPorDia(1.0);
+                            vuelo.setAeropuertoOrigen(aeropuertoOrigen);
+                            vuelo.setAeropuertoDestino(aeropuertoDestino);
+                            vuelo.setCapacidadMaxima(capacidadMaxima);
+                            vuelo.setCapacidadUsada(0);
+                            vuelo.setTiempoTransporte(tiempoTransporte);
+                            vuelo.setCosto(costo);
+                            vuelo.setHoraSalida(horaSalidaParsed);
+                            vuelo.setHoraLlegada(horaLlegadaParsed);
+                        }
+                    }
+                }
+                
+                if (vuelo != null) {
+                    vuelos.add(vuelo);
                 }
             }
             
@@ -127,9 +185,11 @@ public class LectorVuelos {
         
         double costoBase;
         if (vueloMismoContinente) {
-            costoBase = Constantes.TIEMPO_TRANSPORTE_MISMO_CONTINENTE * 100;
+            // 2 días mismo continente = 48 horas
+            costoBase = 48 * 100;
         } else {
-            costoBase = Constantes.TIEMPO_TRANSPORTE_DIFERENTE_CONTINENTE * 150;
+            // 3 días diferente continente = 72 horas
+            costoBase = 72 * 150;
         }
         
         // Ajustar costo basado en capacidad
