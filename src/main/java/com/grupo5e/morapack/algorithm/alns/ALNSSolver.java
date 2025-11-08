@@ -1,20 +1,21 @@
 package com.grupo5e.morapack.algorithm.alns;
 
+import com.grupo5e.morapack.algorithm.input.FuenteDatosInput;
+import com.grupo5e.morapack.algorithm.input.FabricaFuenteDatos;
 import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.core.model.Pedido;
 import com.grupo5e.morapack.core.constants.Constantes;
 import com.grupo5e.morapack.core.service.ServicioDisponibilidadVuelos;
 import com.grupo5e.morapack.core.index.IndiceVuelos;
 import com.grupo5e.morapack.core.index.CacheDisponibilidad;
-import com.grupo5e.morapack.service.AeropuertoService;
-import com.grupo5e.morapack.service.PedidoService;
-import com.grupo5e.morapack.service.VueloService;
 import com.grupo5e.morapack.utils.LectorCancelaciones;
 
 import java.util.*;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
+import java.util.PriorityQueue;
+import java.util.Comparator;
 
 /**
  * ALNSSolver adaptado desde el Solution que proporcionaste.
@@ -27,8 +28,6 @@ public class ALNSSolver {
 
     // Cache robusta Ciudad→Aeropuerto por nombre
     private Map<String, Aeropuerto> cacheNombreCiudadAeropuerto;
-    // OPTIMIZATION: Cache de aeropuertos por código IATA (O(1) lookup en vez de O(N))
-    private Map<String, Aeropuerto> cacheAeropuertosPorIATA;
     private ArrayList<Aeropuerto> aeropuertos;
     private ArrayList<Vuelo> vuelos;
     private List<Pedido> pedidos;
@@ -36,6 +35,9 @@ public class ALNSSolver {
     // Unitización - DESACTIVADA para evitar problemas con IDs en BD
     private static final boolean HABILITAR_UNITIZACION_PRODUCTO = false;
     private ArrayList<Pedido> pedidosOriginales;
+    
+    // ProductTracker - Mapeo directo Producto → Ruta (versión simplificada)
+    private ProductTracker productTracker;
 
     // Ancla temporal T0
     private LocalDateTime T0;
@@ -64,7 +66,7 @@ public class ALNSSolver {
     private int ultimaIteracionMejora;
     private double factorDiversificacion;
 
-    // OPTIMIZED: Pool de paquetes no asignados con PriorityQueue (Recomendación #4)
+    // OPTIMIZED: Pool de paquetes no asignados con PriorityQueue (Backend pattern)
     // Ordena automáticamente por urgencia (deadline más cercano primero)
     private PriorityQueue<Pedido> poolNoAsignados;
 
@@ -79,77 +81,67 @@ public class ALNSSolver {
     // Optimizaciones de rendimiento
     private IndiceVuelos indiceVuelos;
     private CacheDisponibilidad cacheDisponibilidad;
-
-    // Validador de rutas optimizado
-    private com.grupo5e.morapack.algorithm.validador.RutasValidador rutasValidador;
-
-    // Tracker de productos para seguimiento granular
-    private com.grupo5e.morapack.algorithm.tracker.TrackerProducto trackerProducto;
-
-    // OPTIMIZATION: Cache de rutas para evitar recálculos
-    private Map<String, ArrayList<Vuelo>> cacheRutas;
     
-    // OPTIMIZATION: Estado mutable de capacidades en vez de reconstrucción
-    private Map<Vuelo, Integer> capacidadesVuelosEstado;
-    private Map<Aeropuerto, Integer> capacidadesAeropuertosEstado;
-    private int ultimaVersionCapacidades; // Para invalidar cache de peso si cambian
+    // CRÍTICO: RouteValidator para validación optimizada (Backend pattern)
+    private RouteValidator routeValidator;
 
     // Horizon days
     private static final int HORIZON_DAYS = 4;
     private static final boolean DEBUG_MODE = false;
 
-    private final AeropuertoService aeropuertoService;
-    private final PedidoService pedidoService;
-    private final VueloService vueloService;
-    private String uploadSessionId; // Para datos temporales subidos
-
-    public ALNSSolver(AeropuertoService aeropuertoService,
-                      PedidoService pedidoService,
-                      VueloService vueloService) {
-        this(aeropuertoService, pedidoService, vueloService, 500, null, null);
-    }
-
-    public ALNSSolver(AeropuertoService aeropuertoService,
-                      PedidoService pedidoService,
-                      VueloService vueloService,
-                      int maxIteraciones,
-                      Integer tiempoLimiteSegundos) {
-        this(aeropuertoService, pedidoService, vueloService, maxIteraciones, tiempoLimiteSegundos, null);
+    /**
+     * Constructor principal simplificado que usa FuenteDatosInput modular.
+     * Permite ejecutar el algoritmo sin dependencias de Spring.
+     * 
+     * @param maxIteraciones Número máximo de iteraciones ALNS
+     */
+    public ALNSSolver(int maxIteraciones) {
+        this(maxIteraciones, null, null);
     }
     
-    public ALNSSolver(AeropuertoService aeropuertoService,
-                      PedidoService pedidoService,
-                      VueloService vueloService,
-                      int maxIteraciones,
-                      Integer tiempoLimiteSegundos,
-                      String uploadSessionId) {
-        this.solucion = new HashMap<>();
-        this.aeropuertoService = aeropuertoService;
-        this.pedidoService = pedidoService;
-        this.vueloService = vueloService;
-        this.maxIteraciones = maxIteraciones;  // Usar parámetro en vez de hardcoded
-        this.uploadSessionId = uploadSessionId;
-
-        //inicializr primero las listas
-        this.pedidosOriginales = new ArrayList<>(pedidoService.listar());
-        
-        // CARGAR SOLO AEROPUERTOS DISPONIBLES (ACTIVOS)
-        this.aeropuertos = new ArrayList<>(aeropuertoService.listarDisponibles());
-        System.out.println("✅ Aeropuertos ACTIVOS cargados para ALNS: " + this.aeropuertos.size());
-        
-        // VERIFICAR CAPACIDADES DE AEROPUERTOS
-        System.out.println("=== VERIFICACIÓN DE CAPACIDADES DE AEROPUERTOS ===");
-        for (Aeropuerto a : this.aeropuertos) {
-            if (a.getCapacidadMaxima() <= 0) {
-                System.out.println("❌ PROBLEMA: Aeropuerto " + a.getCodigoIATA() +
-                        " tiene capacidad: " + a.getCapacidadMaxima());
-            }
+    /**
+     * Constructor con soporte para ventanas de tiempo (escenarios diarios/semanales).
+     * Si horaInicio y horaFin son null, carga todos los pedidos.
+     * 
+     * @param maxIteraciones Número máximo de iteraciones ALNS
+     * @param horaInicio Hora de inicio de la ventana de simulación (opcional)
+     * @param horaFin Hora de fin de la ventana de simulación (opcional)
+     */
+    public ALNSSolver(int maxIteraciones, LocalDateTime horaInicio, LocalDateTime horaFin) {
+        System.out.println("========================================");
+        System.out.println("INICIALIZANDO ALNS SOLVER");
+        if (horaInicio != null && horaFin != null) {
+            System.out.println("MODO: Ventana de tiempo especificada");
+            System.out.println("Ventana: " + horaInicio + " a " + horaFin);
+        } else {
+            System.out.println("MODO: Todos los pedidos (sin filtrado de tiempo)");
         }
-        this.vuelos = new ArrayList<>(vueloService.listar());
-
-        //ASIGNAR AEROPUERTO ORIGEN ALEATORIO A PEDIDOS
-        asignarAeropuertosOrigen();
-
+        System.out.println("========================================");
+        
+        // 1. Usar factory para fuente de datos (ARCHIVO o BASEDATOS)
+        FuenteDatosInput fuenteDatos = FabricaFuenteDatos.crearFuenteDatos();
+        fuenteDatos.inicializar();
+        
+        System.out.println("Fuente de datos: " + fuenteDatos.obtenerNombreFuente());
+        
+        // 2. Cargar datos desde la fuente
+        this.aeropuertos = new ArrayList<>(fuenteDatos.cargarAeropuertos());
+        this.vuelos = new ArrayList<>(fuenteDatos.cargarVuelos(this.aeropuertos));
+        
+        // CRÍTICO: Cargar pedidos con filtrado de tiempo si se especifica
+        if (horaInicio != null && horaFin != null) {
+            this.pedidosOriginales = new ArrayList<>(
+                fuenteDatos.cargarPedidosPorVentanaDeTiempo(this.aeropuertos, horaInicio, horaFin)
+            );
+        } else {
+            this.pedidosOriginales = new ArrayList<>(fuenteDatos.cargarPedidos(this.aeropuertos));
+        }
+        
+        System.out.println("Aeropuertos cargados: " + this.aeropuertos.size());
+        System.out.println("Vuelos cargados: " + this.vuelos.size());
+        System.out.println("Pedidos originales cargados: " + this.pedidosOriginales.size());
+        
+        // 3. Unitización de productos (si está habilitado)
         if (HABILITAR_UNITIZACION_PRODUCTO) {
             this.pedidos = expandirPaquetesAUnidadesProducto(this.pedidosOriginales);
             System.out.println("UNITIZACIÓN APLICADA: " + this.pedidosOriginales.size() +
@@ -158,70 +150,55 @@ public class ALNSSolver {
             this.pedidos = new ArrayList<>(this.pedidosOriginales);
             System.out.println("UNITIZACIÓN DESHABILITADA: Usando pedidos originales");
         }
-
+        
+        // 4. Inicializar ProductTracker para seguimiento a nivel de producto
+        this.productTracker = new ProductTracker();
+        this.productTracker.initializeFromOrders(this.pedidos);
+        System.out.println("ProductTracker inicializado con " + this.pedidos.size() + " pedidos");
+        
+        // 5. Estructuras base
+        this.solucion = new HashMap<>();
         this.ocupacionAlmacenes = new HashMap<>();
         this.ocupacionTemporalAlmacenes = new HashMap<>();
-
-        //CREA UN MAPA del nombre del nombre de la ciudad y su aeropuerto ("lima",Clase aeropuerto "SPIM")
+        
+        // 6. Inicializar caches y estructuras
+        asignarAeropuertosOrigen();
         inicializarCacheCiudadAeropuerto();
-        // OPTIMIZATION: Inicializar cache de aeropuertos por IATA (O(1) lookup)
-        inicializarCacheAeropuertosPorIATA();
-        // OPTIMIZATION: Inicializar cache de rutas
-        this.cacheRutas = new HashMap<>();
-        // OPTIMIZATION: Inicializar estado de capacidades
-        this.capacidadesVuelosEstado = new HashMap<>();
-        this.capacidadesAeropuertosEstado = new HashMap<>();
-        this.ultimaVersionCapacidades = 0;
-        //HACE QUE EL RELOJ empiece en el pedido con fecha más antigua CUANDO SE EJECUTA EL ALGORITMO
         inicializarT0();
-
+        
+        // 7. RNG y operadores
         this.aleatorio = new Random(System.currentTimeMillis());
-
-        this.operadoresDestruccion = new ALNSDestruction(this.aeropuertos,aeropuertoService);
-        this.operadoresReparacion = new ALNSRepair(this.aeropuertos, vuelos, ocupacionAlmacenes,aeropuertoService);
-
+        this.operadoresDestruccion = new ALNSDestruction(this.aeropuertos);
+        this.operadoresReparacion = new ALNSRepair(this.aeropuertos, this.vuelos, this.ocupacionAlmacenes);
+        
+        // 8. Parámetros ALNS
+        this.maxIteraciones = maxIteraciones;
+        this.temperatura = 100.0;
+        this.tasaEnfriamiento = 0.95;
+        this.tamanoSegmento = 100;
+        
         inicializarParametrosALNS();
-
         inicializarCapacidadAeropuertos();
         inicializarOcupacionTemporalAlmacenes();
-
-        // Inicializar servicio de cancelaciones
+        
+        // 9. Servicios auxiliares / optimizaciones
         inicializarServicioDisponibilidad();
-
-        // Inicializar optimizaciones de rendimiento
         inicializarOptimizaciones();
-
-        // Inicializar validador de rutas optimizado
-        this.rutasValidador = new com.grupo5e.morapack.algorithm.validador.RutasValidador(
-                this.aeropuertos, this.vuelos);
-
-        // Inicializar tracker de productos
-        this.trackerProducto = new com.grupo5e.morapack.algorithm.tracker.TrackerProducto();
-        this.trackerProducto.inicializarDesdePedidos(this.pedidos);
-
-        // DEBUG: Verificar vuelos disponibles
-        System.out.println("=== VERIFICACIÓN DE VUELOS ===");
-        System.out.println("Total vuelos cargados: " + this.vuelos.size());
-
-//        // Buscar vuelos desde UBBB
-//        System.out.println("Vuelos desde UBBB (Bakú):");
-//        this.vuelos.stream()
-//                .filter(v -> v.getAeropuertoOrigen().getCodigoIATA().equals("UBBB"))
-//                .forEach(v -> System.out.println("  → " + v.getAeropuertoDestino().getCodigoIATA() +
-//                        " - Cap: " + v.getCapacidadUsada() + "/" + v.getCapacidadMaxima()));
-//
-//        // Buscar vuelos hacia SLLP
-//        System.out.println("Vuelos hacia SLLP (La Paz):");
-//        this.vuelos.stream()
-//                .filter(v -> v.getAeropuertoDestino().getCodigoIATA().equals("SLLP"))
-//                .forEach(v -> System.out.println("  ← " + v.getAeropuertoOrigen().getCodigoIATA() +
-//                        " - Cap: " + v.getCapacidadUsada() + "/" + v.getCapacidadMaxima()));
-//
-//        // Verificar vuelo directo UBBB→SLLP
-//        boolean existeDirecto = this.vuelos.stream()
-//                .anyMatch(v -> v.getAeropuertoOrigen().getCodigoIATA().equals("UBBB") &&
-//                        v.getAeropuertoDestino().getCodigoIATA().equals("SLLP"));
-//        System.out.println("¿Existe vuelo directo UBBB→SLLP? " + existeDirecto);
+        
+        // 10. Inicializar RouteValidator (CRÍTICO - patrón Backend)
+        System.out.println("Inicializando RouteValidator (optimización O(1))...");
+        this.routeValidator = new RouteValidator(this.aeropuertos, this.vuelos);
+        
+        System.out.println("ALNS Solver inicializado correctamente");
+        System.out.println("Iteraciones configuradas: " + this.maxIteraciones);
+        System.out.println("========================================\n");
+    }
+    
+    /**
+     * Constructor con parámetros por defecto (500 iteraciones).
+     */
+    public ALNSSolver() {
+        this(500);
     }
 
     private void inicializarParametrosALNS() {
@@ -254,28 +231,24 @@ public class ALNSSolver {
         this.ultimaIteracionMejora = 0;
         this.factorDiversificacion = 1.0;
 
-        // OPTIMIZED: Inicializar pool de paquetes no asignados con PriorityQueue
-        // Ordena por deadline (más urgente primero) - Recomendación #4
+        // OPTIMIZED: Inicializar pool con PriorityQueue que ordena por urgencia
         this.poolNoAsignados = new PriorityQueue<>(new Comparator<Pedido>() {
             @Override
             public int compare(Pedido p1, Pedido p2) {
                 // Ordenar por deadline (más cercano primero = mayor urgencia)
-                LocalDateTime d1 = p1.getFechaLimiteEntrega();
-                LocalDateTime d2 = p2.getFechaLimiteEntrega();
-                if (d1 == null && d2 == null) return 0;
-                if (d1 == null) return 1; // nulls last
-                if (d2 == null) return -1;
-                int deadlineComp = d1.compareTo(d2);
+                if (p1.getFechaLimiteEntrega() == null && p2.getFechaLimiteEntrega() == null) return 0;
+                if (p1.getFechaLimiteEntrega() == null) return 1; // nulls last
+                if (p2.getFechaLimiteEntrega() == null) return -1;
+
+                int deadlineComp = p1.getFechaLimiteEntrega().compareTo(p2.getFechaLimiteEntrega());
                 if (deadlineComp != 0) return deadlineComp;
-                
+
                 // Tie-break por prioridad (mayor primero)
-                double prioridad1 = p1.getPrioridad();
-                double prioridad2 = p2.getPrioridad();
-                int priorityComp = Double.compare(prioridad2, prioridad1);
+                int priorityComp = Double.compare(p2.getPrioridad(), p1.getPrioridad());
                 if (priorityComp != 0) return priorityComp;
-                
-                // Tie-break final por ID (Recomendación #3)
-                return Long.compare(p1.getId(), p2.getId());
+
+                // Tie-break final por ID
+                return Integer.compare(p1.getId(), p2.getId());
             }
         });
 
@@ -366,8 +339,16 @@ public class ALNSSolver {
         System.out.println("Aeropuertos leídos: " + this.aeropuertos.size());
         System.out.println("Lectura de vuelos");
         System.out.println("Vuelos leídos: " + this.vuelos.size());
-        System.out.println("Lectura de productos");
-        System.out.println("Productos leídos: " + this.pedidos.size());
+        System.out.println("Lectura de pedidos");
+        System.out.println("Pedidos leídos: " + this.pedidos.size());
+        
+        // Contar productos totales (cada pedido puede tener múltiples productos)
+        int totalProductos = this.pedidos.stream()
+            .mapToInt(p -> (p.getProductos() != null && !p.getProductos().isEmpty()) 
+                ? p.getProductos().size() 
+                : 1)
+            .sum();
+        System.out.println("Productos totales: " + totalProductos);
 
         //SE GENERA UNA SOLUCION QUE SE MODIFICARA HASTA HALLAR LA CORRECTA O MEJOR
         System.out.println("\n=== GENERANDO SOLUCIÓN INICIAL ===");
@@ -386,11 +367,16 @@ public class ALNSSolver {
         System.out.println("\n=== INICIANDO ALGORITMO ALNS ===");
         ejecutarAlgoritmoALNS();
 
+        // CRÍTICO: Actualizar ProductTracker con la mejor solución encontrada
+        // (Siguiendo el patrón del Backend de ejemplo)
         System.out.println("\n=== ACTUALIZANDO SEGUIMIENTO DE PRODUCTOS ===");
-        actualizarTrackingProductos();
+        actualizarSeguimientoProductos();
 
         System.out.println("\n=== RESULTADO FINAL ALNS ===");
         this.imprimirDescripcionSolucion(2);
+        
+        // Imprimir resumen de tracking de productos
+        productTracker.printTrackingSummary();
     }
 
     //Actualiza el pool o inicializa el pool con los pedidos que todavia no tienen rutas por x o y motivos
@@ -407,65 +393,64 @@ public class ALNSSolver {
             System.out.println("Pool de no asignados inicializado: " + poolNoAsignados.size() + " pedidos disponibles para expansión ALNS");
         }
     }
-    /**
-     * Expande la lista de paquetes a reparar con algunos del pool no asignado
-     * para permitir que ALNS explore la asignación de nuevos paquetes
-     * OPTIMIZED: PriorityQueue ya está ordenada por urgencia (deadline + prioridad)
-     */
+    //Se busca agregar paquetes que fueron destruidos al pool de no asignados mediante
     private ArrayList<Map.Entry<Pedido, ArrayList<Vuelo>>> expandirConPaquetesNoAsignados(
             ArrayList<Map.Entry<Pedido, ArrayList<Vuelo>>> paquetesDestruidos, int maxAgregar) {
 
         if (poolNoAsignados.isEmpty() || maxAgregar <= 0) {
             return paquetesDestruidos;
         }
-
+        //Duplica la lista de paquetes destruidos para añadir al pool de paquetes sin ruta
         ArrayList<Map.Entry<Pedido, ArrayList<Vuelo>>> listaExpandida = new ArrayList<>(paquetesDestruidos);
 
-        // Determinar probabilidad de expansión según pool no asignado
+        //Calcula qué porcentaje del total de pedidos están actualmente no asignados.
         double ratioPool = (double) poolNoAsignados.size() / pedidos.size();
         double probabilidadExpansion;
 
         if (ratioPool > 0.5) {
-            // Si >50% no asignados: expansión MUY AGRESIVA
-            probabilidadExpansion = modoDiversificacion ? 0.9 : 0.7; // 90%/70%
+            probabilidadExpansion = modoDiversificacion ? 0.9 : 0.7;
         } else if (ratioPool > 0.3) {
-            // Si >30% no asignados: expansión AGRESIVA  
-            probabilidadExpansion = modoDiversificacion ? 0.7 : 0.5; // 70%/50%
+            probabilidadExpansion = modoDiversificacion ? 0.7 : 0.5;
         } else if (ratioPool > 0.1) {
-            // Si >10% no asignados: expansión MODERADA
-            probabilidadExpansion = modoDiversificacion ? 0.5 : 0.3; // 50%/30%
+            probabilidadExpansion = modoDiversificacion ? 0.5 : 0.3;
         } else {
-            // Si <10% no asignados: expansión CONSERVADORA
-            probabilidadExpansion = modoDiversificacion ? 0.3 : 0.1; // 30%/10%
+            probabilidadExpansion = modoDiversificacion ? 0.3 : 0.1;
         }
-
+        //Si cae por debajo de probabilidadExpansion, entonces decide expandir (añadir pedidos del pool)
         if (aleatorio.nextDouble() < probabilidadExpansion) {
-            // OPTIMIZED: PriorityQueue ya está ordenada por urgencia (Recomendación #4)
-            // No necesitamos ordenar, solo convertir a lista para acceso por índice
             ArrayList<Pedido> noAsignadosOrdenados = new ArrayList<>(poolNoAsignados);
+            //ORDENA LOS PEDIDOS SEGUN LA FECHA LIMITE DE ENTREGA, PRIMERO LOS DE ENTREGA MAXIMA
+            noAsignadosOrdenados.sort((p1, p2) -> {
+                LocalDateTime d1 = p1.getFechaLimiteEntrega();
+                LocalDateTime d2 = p2.getFechaLimiteEntrega();
+                if (d1 == null && d2 == null) return 0;
+                if (d1 == null) return 1;
+                if (d2 == null) return -1;
+                return d1.compareTo(d2);
+            });
 
-            // Determinar cantidad a agregar según pool no asignado
+            //Define cuantos pedidos como maximo se pueden agregar dependiendo del ratioPool
             int maxDinamico;
             if (ratioPool > 0.5) {
-                maxDinamico = Math.min(200, poolNoAsignados.size()); // Hasta 200 si >50% no asignados
+                maxDinamico = Math.min(200, poolNoAsignados.size());
             } else if (ratioPool > 0.3) {
-                maxDinamico = Math.min(100, poolNoAsignados.size()); // Hasta 100 si >30% no asignados
+                maxDinamico = Math.min(100, poolNoAsignados.size());
             } else {
-                maxDinamico = Math.min(50, poolNoAsignados.size());  // Hasta 50 si pocos no asignados
+                maxDinamico = Math.min(50, poolNoAsignados.size());
             }
-
+            //Luego ajusta con el tamaño real del pool (por si tiene menos).
             int agregar = Math.min(maxDinamico, noAsignadosOrdenados.size());
 
+            //Inserta los agregar primeros pedidos (los más urgentes) al final de la lista expandida.
             for (int i = 0; i < agregar; i++) {
                 Pedido pedido = noAsignadosOrdenados.get(i);
-                // Crear entrada con ruta vacía (será determinada por reparación)
                 listaExpandida.add(new java.util.AbstractMap.SimpleEntry<>(pedido, new ArrayList<>()));
             }
 
             if (Constantes.LOGGING_VERBOSO) {
-                System.out.println("Expansión ALNS: Agregando " + agregar + " paquetes no asignados para exploración" +
+                System.out.println("Expansión ALNS: Agregando " + agregar + " pedidos no asignados para exploración" +
                                  " (Pool: " + poolNoAsignados.size() + "/" + pedidos.size() +
-                                 " = " + String.format("%.1f%%", ratioPool * 100) + 
+                                 " = " + String.format("%.1f%%", ratioPool * 100) +
                                  ", Prob: " + String.format("%.0f%%", probabilidadExpansion * 100) + ")");
             }
         }
@@ -473,15 +458,8 @@ public class ALNSSolver {
         return listaExpandida;
     }
 
-    /**
-     * Actualiza el pool de paquetes no asignados basado en la solución actual
-     * OPTIMIZED: PriorityQueue mantiene orden automático por urgencia
-     */
     private void actualizarPoolNoAsignados(HashMap<Pedido, ArrayList<Vuelo>> solucionActual) {
         poolNoAsignados.clear();
-        
-        // Agregar todos los paquetes no asignados al pool
-        // PriorityQueue los ordenará automáticamente según el comparador
         for (Pedido pedido : this.pedidos) {
             if (!solucionActual.containsKey(pedido)) {
                 poolNoAsignados.add(pedido);
@@ -585,17 +563,6 @@ public class ALNSSolver {
             reconstruirCapacidadesDesdeSolucion(solucionTemporal);
             reconstruirAlmacenesDesdeSolucion(solucionTemporal);
 
-            // EARLY STOPPING: Verificar si todos los pedidos están asignados después de reparación
-            if (solucionTemporal.size() == pedidos.size()) {
-                System.out.println("✅ EARLY STOPPING después de reparación: Todos los pedidos asignados (" + 
-                                 solucionTemporal.size() + "/" + pedidos.size() + ")");
-                solucionActual = solucionTemporal;
-                pesoActual = calcularPesoSolucion(solucionTemporal);
-                mejorSolucion.clear();
-                mejorSolucion.put(new HashMap<>(solucionActual), pesoActual);
-                break;
-            }
-
             int pesoTemporal = calcularPesoSolucion(solucionTemporal);
 
             usoOperadores[operadorDestruccion][operadorReparacion]++;
@@ -631,13 +598,6 @@ public class ALNSSolver {
                     System.out.println("Iteración " + iteracion + ": ¡Nueva mejor solución! Peso: " + mejorPeso +
                                      " (mejora: " + String.format("%.2f%%", ratioMejora * 100) + ")" +
                                      " | No asignados: " + poolNoAsignados.size());
-                    
-                    // EARLY STOPPING: Si todos los pedidos están asignados, detener
-                    if (solucionActual.size() == pedidos.size()) {
-                        System.out.println("✅ EARLY STOPPING en iteración " + iteracion + 
-                                         ": Todos los pedidos asignados (" + solucionActual.size() + "/" + pedidos.size() + ")");
-                        break;
-                    }
                 } else if (ratioMejora > 0.05) {
                     puntajesOperadores[operadorDestruccion][operadorReparacion] += 100;
                     conteoSinMejoras = Math.max(0, conteoSinMejoras - 5);
@@ -1234,63 +1194,46 @@ public class ALNSSolver {
         }
     }
 
-    /**
-     * OPTIMIZED: Reconstruye capacidades desde solución.
-     * Mantiene estado sincronizado con objetos de vuelo para compatibilidad.
-     */
     private void reconstruirCapacidadesDesdeSolucion(HashMap<Pedido, ArrayList<Vuelo>> solucion) {
-        // OPTIMIZATION: Limpiar estado y objetos en una pasada
         for (Vuelo f : vuelos) {
             f.setCapacidadUsada(0);
-            capacidadesVuelosEstado.put(f, 0);
         }
 
-        // Actualizar desde solución
         for (Map.Entry<Pedido, ArrayList<Vuelo>> entrada : solucion.entrySet()) {
             Pedido pedido = entrada.getKey();
             ArrayList<Vuelo> ruta = entrada.getValue();
             int conteoProductos = pedido.getProductos() != null ? pedido.getProductos().size() : 1;
 
             for (Vuelo f : ruta) {
-                int nuevaCapacidad = f.getCapacidadUsada() + conteoProductos;
-                f.setCapacidadUsada(nuevaCapacidad);
-                capacidadesVuelosEstado.put(f, nuevaCapacidad);
+                f.setCapacidadUsada(f.getCapacidadUsada() + conteoProductos);
             }
         }
-        
-        ultimaVersionCapacidades++;
     }
 
     private Map<Aeropuerto, Integer> crearSnapshotCapacidadAeropuerto() {
         Map<Aeropuerto, Integer> snapshot = new HashMap<>();
         for (Aeropuerto aeropuerto : aeropuertos) {
-            snapshot.put(aeropuerto, aeropuerto.getCapacidadActual());
-            //snapshot.put(aeropuerto, ocupacionAlmacenes.getOrDefault(aeropuerto, 0));
+            // CORREGIDO: Obtener del almacen directamente
+            int capacidad = (aeropuerto.getAlmacen() != null) 
+                ? aeropuerto.getAlmacen().getCapacidadUsada() 
+                : 0;
+            snapshot.put(aeropuerto, capacidad);
         }
         return snapshot;
     }
 
     private void restaurarAeropuertos(Map<Aeropuerto, Integer> snapshot) {
         for(Aeropuerto aeropuerto : aeropuertos) {
-            aeropuerto.setCapacidadActual(snapshot.getOrDefault(aeropuerto, 0));
-            //ocupacionAlmacenes.put(aeropuerto, snapshot.getOrDefault(aeropuerto, 0));
+            // CORREGIDO: Restaurar en el almacen directamente
+            if (aeropuerto.getAlmacen() != null) {
+                aeropuerto.getAlmacen().setCapacidadUsada(snapshot.getOrDefault(aeropuerto, 0));
+            }
         }
-//        ocupacionAlmacenes.clear();
-//        ocupacionAlmacenes.putAll(snapshot);
     }
 
-    /**
-     * OPTIMIZED: Reconstruye capacidades de almacenes desde solución.
-     * Mantiene estado sincronizado para evitar recálculos.
-     */
     private void reconstruirAlmacenesDesdeSolucion(HashMap<Pedido, ArrayList<Vuelo>> solucion) {
-        // OPTIMIZATION: Limpiar estado en una pasada
         inicializarCapacidadAeropuertos();
-        for (Aeropuerto a : aeropuertos) {
-            capacidadesAeropuertosEstado.put(a, 0);
-        }
 
-        // Actualizar desde solución
         for (Map.Entry<Pedido, ArrayList<Vuelo>> entrada : solucion.entrySet()) {
             Pedido pedido = entrada.getKey();
             ArrayList<Vuelo> ruta = entrada.getValue();
@@ -1300,23 +1243,21 @@ public class ALNSSolver {
                 Aeropuerto aeropuertoDestino = obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo());
                 if (aeropuertoDestino != null) {
                     actualizarCapacidadAeropuertos(aeropuertoDestino.getCodigoIATA(), conteoProductos);
-                    capacidadesAeropuertosEstado.merge(aeropuertoDestino, conteoProductos, Integer::sum);
                 }
             } else {
                 Vuelo ultimoVuelo = ruta.get(ruta.size() - 1);
-                Aeropuerto destino = ultimoVuelo.getAeropuertoDestino();
-                actualizarCapacidadAeropuertos(destino.getCodigoIATA(), conteoProductos);
-                capacidadesAeropuertosEstado.merge(destino, conteoProductos, Integer::sum);
+                actualizarCapacidadAeropuertos(ultimoVuelo.getAeropuertoDestino().getCodigoIATA(), conteoProductos);
             }
         }
-        
-        ultimaVersionCapacidades++;
     }
     void actualizarCapacidadAeropuertos(String codigoAeropuertoDestino, int cantidad) {
         for(Aeropuerto aeropuerto : aeropuertos) {
             if(aeropuerto.getCodigoIATA().equals(codigoAeropuertoDestino)) {
-                int capacidadActual = aeropuerto.getCapacidadActual();
-                aeropuerto.setCapacidadActual(capacidadActual + cantidad);
+                // CORREGIDO: Actualizar el almacen directamente
+                if (aeropuerto.getAlmacen() != null) {
+                    int capacidadActual = aeropuerto.getAlmacen().getCapacidadUsada();
+                    aeropuerto.getAlmacen().setCapacidadUsada(capacidadActual + cantidad);
+                }
                 break;
             }
         }
@@ -1343,22 +1284,6 @@ public class ALNSSolver {
         System.out.println("Cache inicializada: " + cacheNombreCiudadAeropuerto.size() + " ciudades");
     }
 
-    /**
-     * OPTIMIZATION: Inicializa cache de aeropuertos por código IATA.
-     * Reduce búsqueda de O(N) a O(1) para obtenerAeropuerto()
-     */
-    private void inicializarCacheAeropuertosPorIATA() {
-        cacheAeropuertosPorIATA = new HashMap<>();
-        for (Aeropuerto aeropuerto : aeropuertos) {
-            if (aeropuerto != null && aeropuerto.getCodigoIATA() != null) {
-                String codigoNormalizado = aeropuerto.getCodigoIATA().toLowerCase().trim();
-                cacheAeropuertosPorIATA.put(codigoNormalizado, aeropuerto);
-            }
-        }
-        System.out.println("✅ Cache de aeropuertos por IATA inicializada: " + 
-                          cacheAeropuertosPorIATA.size() + " aeropuertos");
-    }
-
     private void inicializarT0() {
         T0 = LocalDateTime.now();
 
@@ -1372,6 +1297,54 @@ public class ALNSSolver {
         }
 
         System.out.println("T0 inicializado: " + T0);
+    }
+
+    /**
+     * Actualiza el ProductTracker con la mejor solución encontrada por el algoritmo ALNS.
+     * 
+     * Este método se llama UNA VEZ al final del algoritmo, no durante las iteraciones.
+     * 
+     * Para cada pedido en la mejor solución, asigna todos sus productos a la ruta correspondiente.
+     */
+    private void actualizarSeguimientoProductos() {
+        if (productTracker == null) {
+            System.out.println("⚠️ ProductTracker no inicializado");
+            return;
+        }
+
+        if (mejorSolucion == null || mejorSolucion.isEmpty()) {
+            System.out.println("⚠️ No hay solución para rastrear productos");
+            return;
+        }
+
+        // Extraer el mapa de solución interno (mejorSolucion es un Map<HashMap<Pedido,ArrayList<Vuelo>>, Integer>)
+        HashMap<Pedido, ArrayList<Vuelo>> solucionActual = mejorSolucion.keySet().iterator().next();
+        
+        if (solucionActual == null || solucionActual.isEmpty()) {
+            System.out.println("⚠️ No hay asignaciones en la mejor solución");
+            return;
+        }
+
+        int productosRastreados = 0;
+        
+        // Recorrer la MEJOR solución encontrada
+        for (Map.Entry<Pedido, ArrayList<Vuelo>> entry : solucionActual.entrySet()) {
+            Pedido pedido = entry.getKey();
+            ArrayList<Vuelo> ruta = entry.getValue();
+            
+            // Asignar TODOS los productos de este pedido a su ruta
+            List<Producto> productos = pedido.getProductos();
+            if (productos != null && !productos.isEmpty()) {
+                for (Producto producto : productos) {
+                    if (producto != null && producto.getId() != null) {
+                        productTracker.assignProductToRoute(producto, ruta);
+                        productosRastreados++;
+                    }
+                }
+            }
+        }
+        
+        System.out.println("✓ Productos rastreados: " + productosRastreados);
     }
 
     private List<Pedido> expandirPaquetesAUnidadesProducto(List<Pedido> pedidosOriginales) {
@@ -1391,8 +1364,8 @@ public class ALNSSolver {
     private Pedido crearUnidadPaquete(Pedido pedidoOriginal, int indiceUnidad) {
         Pedido unidad = new Pedido();
 
-        // Generar ID único garantizado
-        long idUnico = pedidoOriginal.getId() * 1000L + indiceUnidad;
+        // Generar ID único garantizado (convertir a Integer)
+        int idUnico = pedidoOriginal.getId() * 1000 + indiceUnidad;
         unidad.setId(idUnico);
 
 
@@ -1452,8 +1425,23 @@ public class ALNSSolver {
     }
 
     private boolean esRutaValida(Pedido pedido, ArrayList<Vuelo> ruta) {
-        // Usar validador optimizado con O(1) lookups y caching
-        return rutasValidador.esRutaValida(pedido, ruta);
+        if (pedido == null || ruta == null || ruta.isEmpty()) return false;
+
+        int qty = pedido.getProductos() != null && !pedido.getProductos().isEmpty() ? pedido.getProductos().size() : 1;
+
+        if (!cabeEnCapacidad(ruta, qty)) return false;
+
+        Aeropuerto expectedOrigin = obtenerAeropuerto(pedido.getAeropuertoOrigenCodigo());
+        if (expectedOrigin == null || !ruta.get(0).getAeropuertoOrigen().equals(expectedOrigin)) return false;
+
+        for (int i = 0; i < ruta.size() - 1; i++) {
+            if (!ruta.get(i).getAeropuertoDestino().equals(ruta.get(i + 1).getAeropuertoOrigen())) return false;
+        }
+
+        Aeropuerto expectedDestination = obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo());
+        if (expectedDestination == null || !ruta.get(ruta.size() - 1).getAeropuertoDestino().equals(expectedDestination)) return false;
+
+        return seRespetaDeadline(pedido, ruta);
     }
 
     private boolean puedeAsignarConOptimizacionEspacio(Pedido pedido, ArrayList<Vuelo> ruta,
@@ -1680,12 +1668,6 @@ public class ALNSSolver {
 
         System.out.println("  Iteración " + iteracion + " completada: " + asignadosEnIteracion + " pedidos asignados");
 
-        // EARLY STOPPING: Si todos los pedidos están asignados, detener
-        if (paquetesAsignados == pedidos.size()) {
-            System.out.println("  ✅ EARLY STOPPING: Todos los pedidos asignados (" + paquetesAsignados + "/" + pedidos.size() + ")");
-            break;
-        }
-
         // Si no se asignaron pedidos en esta iteración, no hay punto en continuar
         if (asignadosEnIteracion == 0) {
             break;
@@ -1814,30 +1796,13 @@ public class ALNSSolver {
     }
 
     /**
-     * OPTIMIZED: Encuentra la mejor ruta para un pedido considerando disponibilidad de vuelos.
+     * Encuentra la mejor ruta para un pedido considerando disponibilidad de vuelos.
      * Intenta rutas directas primero, luego con 1 escala, y finalmente con 2 escalas.
-     * Usa cache para evitar recálculos de rutas idénticas.
      *
      * @param pedido Pedido para el cual buscar ruta
      * @return Mejor ruta encontrada, o null si no hay rutas disponibles
      */
     private ArrayList<Vuelo> encontrarMejorRuta(Pedido pedido) {
-        // OPTIMIZATION: Verificar cache primero
-        int dia = calcularDiaOperacion(pedido);
-        String claveCache = generarClaveCacheRuta(pedido, dia);
-        
-        // Usar un marcador especial para distinguir "null cacheado" de "no existe en cache"
-        // Usamos una lista especial marcada como null-result
-        if (cacheRutas.containsKey(claveCache)) {
-            ArrayList<Vuelo> rutaCacheada = cacheRutas.get(claveCache);
-            if (rutaCacheada == null) {
-                // Fue cacheado como "no hay ruta disponible"
-                return null;
-            }
-            // Retornar copia para evitar modificación del cache
-            return new ArrayList<>(rutaCacheada);
-        }
-
         Ciudad origen = obtenerAeropuerto(pedido.getAeropuertoOrigenCodigo()).getCiudad();
         Ciudad destino = obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo()).getCiudad();
 
@@ -1847,10 +1812,11 @@ public class ALNSSolver {
         }
 
         if (origen.equals(destino)) {
-            ArrayList<Vuelo> rutaVacia = new ArrayList<>();
-            cacheRutas.put(claveCache, rutaVacia); // Cachear también rutas vacías
-            return rutaVacia;
+            return new ArrayList<>();
         }
+
+        // Calcular día de operación para verificar disponibilidad
+        int dia = calcularDiaOperacion(pedido);
 
         ArrayList<ArrayList<Vuelo>> rutasValidas = new ArrayList<>();
         ArrayList<Double> puntajesRuta = new ArrayList<>();
@@ -1882,8 +1848,6 @@ public class ALNSSolver {
                 System.out.println("No se encontraron rutas disponibles para pedido " + pedido.getId() +
                                  " en día " + dia + " (cancelaciones activas)");
             }
-            // OPTIMIZATION: Cachear también resultado negativo (null) para evitar búsquedas repetidas
-            cacheRutas.put(claveCache, null);
             return null;
         }
 
@@ -1910,23 +1874,7 @@ public class ALNSSolver {
             indiceSeleccionado = 0;
         }
 
-        ArrayList<Vuelo> mejorRuta = rutasValidas.get(indiceSeleccionado);
-        
-        // OPTIMIZATION: Guardar en cache antes de retornar
-        if (mejorRuta != null) {
-            cacheRutas.put(claveCache, new ArrayList<>(mejorRuta)); // Copia para cache
-        }
-        
-        return mejorRuta;
-    }
-
-    /**
-     * OPTIMIZATION: Genera clave única para cache de rutas.
-     * Formato: "origen-destino-dia"
-     */
-    private String generarClaveCacheRuta(Pedido pedido, int dia) {
-        return pedido.getAeropuertoOrigenCodigo() + "-" + 
-               pedido.getAeropuertoDestinoCodigo() + "-" + dia;
+        return rutasValidas.get(indiceSeleccionado);
     }
 
     /**
@@ -2208,24 +2156,16 @@ public class ALNSSolver {
         double eficienciaContinental = calcularEficienciaContinental(mapaSolucion);
         double utilizacionAlmacenes = calcularUtilizacionAlmacenes();
 
-        // Peso final REBALANCEADO - PRIORIDAD: MÁS PAQUETES ASIGNADOS
         int peso = (int) (
-            // PRIORIDAD ABSOLUTA: Cantidad de paquetes y productos (MAXIMIZAR)
-            totalPaquetes * 5000 +                // 5,000 puntos por paquete (DOMINANTE)
-            totalProductos * 1000 +                // 1,000 puntos por producto (MUY ALTO)
-            
-            // FACTOR CALIDAD: On-time como multiplicador, no aditivo
-            tasaATiempo * 500 +                    // 500 puntos máximo por calidad on-time
-            
-            // EFICIENCIA OPERATIVA (secundaria)
-            Math.min(margenPromedioEntrega * 50, 1000) + // Margen de seguridad reducido
-            eficienciaContinental * 500 +           // Eficiencia continental
-            utilizacionCapacidadPromedio * 200 +    // Utilización de vuelos
-            utilizacionAlmacenes * 100 +           // Utilización de almacenes
-            
-            // PENALIZACIONES MENORES
-            - tiempoPromedioEntrega * 20 -          // Penalización tiempo reducida
-            - calcularComplejidadRuteo(mapaSolucion) * 50 // Penalización complejidad reducida
+            totalPaquetes * 100000 +
+            totalProductos * 10000 +
+            tasaATiempo * 5000 +
+            Math.min(margenPromedioEntrega * 50, 1000) +
+            eficienciaContinental * 500 +
+            utilizacionCapacidadPromedio * 200 +
+            utilizacionAlmacenes * 100 -
+            tiempoPromedioEntrega * 20 -
+            calcularComplejidadRuteo(mapaSolucion) * 50
         );
 
         if (tasaATiempo < 0.8) {
@@ -2579,33 +2519,29 @@ public class ALNSSolver {
         return new int[]{minuto, max};
     }
 
-    /**
-     * OPTIMIZED: Búsqueda O(1) usando cache en vez de búsqueda lineal O(N).
-     * Antes: O(N) con búsqueda lineal en cada llamada (49+ llamadas)
-     * Ahora: O(1) con HashMap cacheado
-     */
     private Aeropuerto obtenerAeropuerto(String codigoIATA) {
         if (codigoIATA == null || codigoIATA.trim().isEmpty()) {
-            if (DEBUG_MODE) {
-                System.err.println("❌ Código IATA nulo o vacío");
-            }
+            System.err.println("❌ Código IATA nulo o vacío");
             return null;
         }
 
-        // OPTIMIZATION: Búsqueda O(1) usando cache
-        String codigoNormalizado = codigoIATA.toLowerCase().trim();
-        Aeropuerto aeropuerto = cacheAeropuertosPorIATA.get(codigoNormalizado);
-        
-        if (aeropuerto == null && DEBUG_MODE) {
-            System.err.println("❌ No se encontró aeropuerto con código IATA: '" + codigoIATA + "'");
-            System.err.println("   Aeropuertos disponibles: " +
-                    this.aeropuertos.stream()
-                            .filter(a -> a != null && a.getCodigoIATA() != null)
-                            .map(Aeropuerto::getCodigoIATA)
-                            .collect(Collectors.joining(", ")));
+        for (Aeropuerto aeropuerto : this.aeropuertos) {
+            if (aeropuerto != null &&
+                    aeropuerto.getCodigoIATA() != null &&
+                    aeropuerto.getCodigoIATA().equalsIgnoreCase(codigoIATA.trim())) {
+                return aeropuerto;
+            }
         }
 
-        return aeropuerto;
+        // Log para debugging
+        System.err.println("❌ No se encontró aeropuerto con código IATA: '" + codigoIATA + "'");
+        System.err.println("   Aeropuertos disponibles: " +
+                this.aeropuertos.stream()
+                        .filter(a -> a != null && a.getCodigoIATA() != null)
+                        .map(Aeropuerto::getCodigoIATA)
+                        .collect(Collectors.joining(", ")));
+
+        return null;
     }
 
     // ==================== GETTERS PÚBLICOS PARA ACCEDER A LA SOLUCIÓN ====================
@@ -2674,67 +2610,23 @@ public class ALNSSolver {
         
         return noAsignados;
     }
-
-    /**
-     * Obtiene la solución a nivel producto (no solo pedido).
-     * Útil para APIs y reportes que requieren información granular.
-     * 
-     * @return Map<Producto, ArrayList<Vuelo>> solución a nivel producto
-     */
-    public Map<Producto, ArrayList<Vuelo>> getSolucionNivelProducto() {
-        if (trackerProducto == null) {
-            return new HashMap<>();
-        }
-        return trackerProducto.obtenerSolucionNivelProducto();
-    }
-
-    /**
-     * Actualiza el tracking de productos con la mejor solución encontrada.
-     * Asigna las rutas de cada pedido a todos sus productos individuales.
-     */
-    private void actualizarTrackingProductos() {
-        if (trackerProducto == null) {
-            System.out.println("⚠️ TrackerProducto no está inicializado");
-            return;
-        }
-
-        // Obtener la mejor solución
-        HashMap<Pedido, ArrayList<Vuelo>> mejorSolucion = getMejorSolucion();
-
-        if (mejorSolucion == null || mejorSolucion.isEmpty()) {
-            System.out.println("⚠️ No hay solución disponible para actualizar tracking");
-            return;
-        }
-
-        int productosRastreados = 0;
-
-        // Asignar cada pedido de la solución a sus productos
-        for (Map.Entry<Pedido, ArrayList<Vuelo>> entry : mejorSolucion.entrySet()) {
-            Pedido pedido = entry.getKey();
-            ArrayList<Vuelo> ruta = entry.getValue();
-
-            // Asignar la ruta al pedido en el tracker
-            trackerProducto.asignarPedidoARuta(pedido, ruta);
-
-            // Contar productos del pedido
-            if (pedido.getProductos() != null) {
-                productosRastreados += pedido.getProductos().size();
-            } else {
-                productosRastreados += 1; // Si no tiene productos, contar como 1
-            }
-        }
-
-        System.out.println("Productos rastreados: " + productosRastreados);
-        
-        // Imprimir resumen de tracking
-        trackerProducto.imprimirResumenTracking();
-    }
-
     //METODO PARA AGREGAR AEROPUERTOS ORIGEN
     private void asignarAeropuertosOrigen(){
-        for(Pedido pedido : pedidosOriginales){
+        for(Pedido pedido : pedidos){
             pedido.setAeropuertoOrigenCodigo(colocarAeropuertoPrincipalAleatorio(pedido.getAeropuertoDestinoCodigo()));
         }
+//        // A) Completar en pedidosOriginales
+//        for (Pedido p : pedidosOriginales) {
+//            if (p.getAeropuertoOrigenCodigo() == null || p.getAeropuertoOrigenCodigo().isBlank()) {
+//                p.setAeropuertoOrigenCodigo(colocarAeropuertoPrincipalAleatorio(p.getAeropuertoDestinoCodigo()));
+//            }
+//        }
+//        // B) Completar en pedidos (las unidades creadas en DataLoader)
+//        for (Pedido p : pedidos) {
+//            if (p.getAeropuertoOrigenCodigo() == null || p.getAeropuertoOrigenCodigo().isBlank()) {
+//                p.setAeropuertoOrigenCodigo(colocarAeropuertoPrincipalAleatorio(p.getAeropuertoDestinoCodigo()));
+//            }
+//        }
     }
     // Método auxiliar para encontrar aeropuerto por defecto
     private String colocarAeropuertoPrincipalAleatorio(String codigoDestino) {
@@ -2752,5 +2644,42 @@ public class ALNSSolver {
         String codigoIATAOrigen = aeropuertos.get(indiceAleatorio);
         //System.out.println("🔀 Usando aeropuerto por defecto: " + codigoIATAOrigen);
         return codigoIATAOrigen;
+    }
+    
+    /**
+     * Obtiene la solución a nivel de producto.
+     * Convierte la solución interna (Pedido -> Rutas) a formato producto-level.
+     * Siguiendo patrón de MoraPack-Backend.
+     * 
+     * @return Map<Producto, ArrayList<Vuelo>> con la ruta de cada producto individual
+     */
+    public Map<Producto, ArrayList<Vuelo>> obtenerSolucionNivelProducto() {
+        Map<Producto, ArrayList<Vuelo>> solucionProductos = new HashMap<>();
+        
+        // Convertir desde la mejor solución de pedidos a productos
+        if (mejorSolucion != null && !mejorSolucion.isEmpty()) {
+            for (HashMap<Pedido, ArrayList<Vuelo>> rutasPedidos : mejorSolucion.keySet()) {
+                for (Map.Entry<Pedido, ArrayList<Vuelo>> entry : rutasPedidos.entrySet()) {
+                    Pedido pedido = entry.getKey();
+                    ArrayList<Vuelo> ruta = entry.getValue();
+                    
+                    // Si el pedido tiene productos, asignar la misma ruta a cada uno
+                    if (pedido.getProductos() != null && !pedido.getProductos().isEmpty()) {
+                        for (Producto producto : pedido.getProductos()) {
+                            solucionProductos.put(producto, new ArrayList<>(ruta));
+                        }
+                    } else {
+                        // Si no tiene productos, crear uno por defecto
+                        Producto productoDefault = new Producto();
+                        productoDefault.setId(pedido.getId() * 1000); // ID derivado
+                        productoDefault.setPedido(pedido);
+                        productoDefault.setNombre("Producto-Default-" + pedido.getId());
+                        solucionProductos.put(productoDefault, new ArrayList<>(ruta));
+                    }
+                }
+            }
+        }
+        
+        return solucionProductos;
     }
 }

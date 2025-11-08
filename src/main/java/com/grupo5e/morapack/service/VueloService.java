@@ -8,14 +8,14 @@ import java.util.Optional;
 
 public interface VueloService {
     List<Vuelo> listar();
-    int insertar(Vuelo vuelo);
-    Vuelo actualizar(int id, Vuelo vuelo);
-    Vuelo buscarPorId(Long id);
-    List<Vuelo> buscarPorRuta(Long origenId, Long destinoId);
+    Integer insertar(Vuelo vuelo);
+    Vuelo actualizar(Integer id, Vuelo vuelo);
+    Vuelo buscarPorId(Integer id);
+    List<Vuelo> buscarPorRuta(Integer origenId, Integer destinoId);
     List<Vuelo> buscarPorEstado(EstadoVuelo estado);
-    List<Vuelo> buscarDisponibles(int capacidadMinima);
+    List<Vuelo> buscarDisponibles(Integer capacidadMinima);
     Optional<Vuelo> buscarPorIdentificador(String identificador);
-    void eliminar(int id);
-    boolean existePorId(int id);
+    void eliminar(Integer id);
+    boolean existePorId(Integer id);
     List<Vuelo> insertarBulk(List<Vuelo> vuelos);
 }

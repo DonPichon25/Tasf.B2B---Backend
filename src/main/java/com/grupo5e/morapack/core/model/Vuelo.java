@@ -1,5 +1,6 @@
 package com.grupo5e.morapack.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -8,6 +9,7 @@ import lombok.Setter;
 import com.grupo5e.morapack.core.enums.EstadoVuelo;
 
 //import java.sql.Time;
+import java.util.ArrayList;
 import java.util.List;
 
 import java.time.LocalTime;
@@ -18,10 +20,11 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @Entity
 @Table(name = "vuelos")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "rutas"})
 public class Vuelo {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Integer id;
 
     // Número de frecuencias por día (ejemplo: 2 vuelos diarios)
     private double frecuenciaPorDia;
@@ -52,9 +55,10 @@ public class Vuelo {
     @Enumerated(EnumType.STRING)
     private EstadoVuelo estado;
 
-    @ManyToOne
-    @JoinColumn(name = "ruta_id", referencedColumnName = "id", nullable = true)
-    private Ruta rutaAsignada;
+    // NOTA: La relación con Ruta ahora es @ManyToMany en Ruta.java
+    // Un vuelo puede estar en múltiples rutas
+    @ManyToMany(mappedBy = "vuelos")
+    private List<Ruta> rutas;
 
     /**
      * Genera el identificador único del vuelo basado en ruta y horario.

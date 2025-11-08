@@ -1,5 +1,6 @@
 package com.grupo5e.morapack.core.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.grupo5e.morapack.core.enums.Continente;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -13,10 +14,11 @@ import lombok.Setter;
 @NoArgsConstructor
 @Entity
 @Table(name = "ciudades")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Ciudad {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Integer id;
     private String codigo; //DE 4 LETRAS SEGUN EL txt
     private String nombre; //nombre de la ciudad
     private String pais; //pais de la ciudad

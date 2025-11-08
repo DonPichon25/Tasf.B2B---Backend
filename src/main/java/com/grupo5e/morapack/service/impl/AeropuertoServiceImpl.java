@@ -22,24 +22,46 @@ public class AeropuertoServiceImpl implements AeropuertoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Aeropuerto> listar() {
-        return aeropuertoRepository.findAll();
+        List<Aeropuerto> aeropuertos = aeropuertoRepository.findAll();
+        // Forzar inicialización de relaciones LAZY (Almacen y Ciudad)
+        aeropuertos.forEach(a -> {
+            if (a.getAlmacen() != null) {
+                a.getAlmacen().getCapacidadUsada();
+            }
+            if (a.getCiudad() != null) {
+                a.getCiudad().getCodigo(); // Fuerza inicialización de Ciudad
+            }
+        });
+        return aeropuertos;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<Aeropuerto> listarDisponibles() {
-        return aeropuertoRepository.findByEstado(EstadoAeropuerto.DISPONIBLE);
+        List<Aeropuerto> aeropuertos = aeropuertoRepository.findByEstado(EstadoAeropuerto.DISPONIBLE);
+        // Forzar inicialización de relaciones LAZY (Almacen y Ciudad)
+        aeropuertos.forEach(a -> {
+            if (a.getAlmacen() != null) {
+                a.getAlmacen().getCapacidadUsada();
+            }
+            if (a.getCiudad() != null) {
+                a.getCiudad().getCodigo(); // Fuerza inicialización de Ciudad
+            }
+        });
+        return aeropuertos;
     }
 
     @Override
     @Transactional
-    public Long insertar(Aeropuerto aeropuerto) {
+    public Integer insertar(Aeropuerto aeropuerto) {
         return aeropuertoRepository.save(aeropuerto).getId();
     }
 
     @Override
     @Transactional
-    public Aeropuerto actualizar(Long id, Aeropuerto aeropuerto) {
+    public Aeropuerto actualizar(Integer id, Aeropuerto aeropuerto) {
         Aeropuerto existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Aeropuerto", "id", id);
@@ -50,7 +72,7 @@ public class AeropuertoServiceImpl implements AeropuertoService {
 
     @Override
     @Transactional
-    public Aeropuerto toggleEstado(Long id) {
+    public Aeropuerto toggleEstado(Integer id) {
         Aeropuerto aeropuerto = buscarPorId(id);
         if (aeropuerto == null) {
             throw new ResourceNotFoundException("Aeropuerto", "id", id);
@@ -67,18 +89,40 @@ public class AeropuertoServiceImpl implements AeropuertoService {
     }
 
     @Override
-    public Aeropuerto buscarPorId(Long id) {
-        return aeropuertoRepository.findById(id).orElse(null);
+    @Transactional(readOnly = true)
+    public Aeropuerto buscarPorId(Integer id) {
+        Aeropuerto aeropuerto = aeropuertoRepository.findById(id).orElse(null);
+        if (aeropuerto != null) {
+            // Forzar inicialización de relaciones LAZY
+            if (aeropuerto.getAlmacen() != null) {
+                aeropuerto.getAlmacen().getCapacidadUsada();
+            }
+            if (aeropuerto.getCiudad() != null) {
+                aeropuerto.getCiudad().getCodigo();
+            }
+        }
+        return aeropuerto;
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Optional<Aeropuerto> buscarPorCodigoIATA(String codigoIATA) {
-        return aeropuertoRepository.findByCodigoIATA(codigoIATA);
+        Optional<Aeropuerto> aeropuerto = aeropuertoRepository.findByCodigoIATA(codigoIATA);
+        aeropuerto.ifPresent(a -> {
+            // Forzar inicialización de relaciones LAZY
+            if (a.getAlmacen() != null) {
+                a.getAlmacen().getCapacidadUsada();
+            }
+            if (a.getCiudad() != null) {
+                a.getCiudad().getCodigo();
+            }
+        });
+        return aeropuerto;
     }
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(Integer id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Aeropuerto", "id", id);
         }
@@ -86,7 +130,7 @@ public class AeropuertoServiceImpl implements AeropuertoService {
     }
 
     @Override
-    public boolean existePorId(Long id) {
+    public boolean existePorId(Integer id) {
         return aeropuertoRepository.existsById(id);
     }
 

@@ -27,13 +27,13 @@ public class ProductoServiceImpl implements ProductoService {
 
     @Override
     @Transactional
-    public Long insertar(Producto producto) {
+    public Integer insertar(Producto producto) {
         return productoRepository.save(producto).getId();
     }
 
     @Override
     @Transactional
-    public Producto actualizar(Long id, Producto producto) {
+    public Producto actualizar(Integer id, Producto producto) {
         Producto existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Producto", "id", id);
@@ -43,12 +43,12 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
-    public Producto buscarPorId(Long id) {
+    public Producto buscarPorId(Integer id) {
         return productoRepository.findById(id).orElse(null);
     }
 
     @Override
-    public List<Producto> buscarPorPedido(Long pedidoId) {
+    public List<Producto> buscarPorPedido(Integer pedidoId) {
         return productoRepository.findByPedidoId(pedidoId);
     }
 
@@ -59,7 +59,7 @@ public class ProductoServiceImpl implements ProductoService {
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(Integer id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Producto", "id", id);
         }
@@ -67,7 +67,7 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
-    public boolean existePorId(Long id) {
+    public boolean existePorId(Integer id) {
         return productoRepository.existsById(id);
     }
 

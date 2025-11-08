@@ -3,7 +3,9 @@ package com.grupo5e.morapack.utils;
 import com.grupo5e.morapack.core.enums.Continente;
 import com.grupo5e.morapack.core.enums.EstadoProducto;
 import com.grupo5e.morapack.core.enums.EstadoPedido;
+import com.grupo5e.morapack.core.enums.Rol;
 import com.grupo5e.morapack.core.model.*;
+import com.grupo5e.morapack.service.ClienteService;
 import com.grupo5e.morapack.service.PedidoService;
 
 import java.io.BufferedReader;
@@ -22,15 +24,18 @@ public class LectorPedidos {
     private final Map<String, Aeropuerto> mapaAeropuertos;
     private final Random aleatorio;
 
-    // Usamos el PedidoService en lugar de repositorios individuales
+    // Servicios necesarios
     private final PedidoService pedidoService;
+    private final ClienteService clienteService;
 
     public LectorPedidos(String rutaArchivo,
                          ArrayList<Aeropuerto> aeropuertos,
-                         PedidoService pedidoService) {
+                         PedidoService pedidoService,
+                         ClienteService clienteService) {
         this.rutaArchivo = rutaArchivo;
         this.aeropuertos = aeropuertos;
         this.pedidoService = pedidoService;
+        this.clienteService = clienteService;
         this.aleatorio = new Random();
         this.mapaAeropuertos = crearMapaAeropuertos();
     }
@@ -79,8 +84,8 @@ public class LectorPedidos {
         Aeropuerto aeropuertoDestino = mapaAeropuertos.get(codigoAeropuertoDestino);
 
         if (aeropuertoDestino != null) {
-            // Crear cliente (asumiendo que el ClienteService manejará la persistencia)
-            Cliente cliente = crearCliente(idCliente, aeropuertoDestino.getCiudad());
+            // Obtener o crear cliente (debe estar persistido ANTES de asociarlo al pedido)
+            Cliente cliente = obtenerOCrearCliente(idCliente, aeropuertoDestino.getCiudad());
 
             // Calcular fechas
             LocalDateTime fechaPedido = calcularFechaPedido(hora, minuto);
@@ -92,13 +97,16 @@ public class LectorPedidos {
             // Crear productos
             ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido);
             pedido.setProductos(productos);
+            
+            System.out.println("  📦 Pedido creado con " + productos.size() + " productos");
 
             // Guardar paquete usando el servicio
             try {
-                Long idPaqueteGuardado = pedidoService.insertar(pedido);
-                System.out.println("Paquete guardado con ID: " + idPaqueteGuardado);
+                Integer idPaqueteGuardado = pedidoService.insertar(pedido);
+                System.out.println("  ✓ Paquete guardado con ID: " + idPaqueteGuardado + 
+                                   " (con " + productos.size() + " productos)");
             } catch (Exception e) {
-                System.err.println("Error al guardar paquete: " + e.getMessage());
+                System.err.println("  ✗ Error al guardar paquete: " + e.getMessage());
                 e.printStackTrace();
             }
         } else {
@@ -106,13 +114,37 @@ public class LectorPedidos {
         }
     }
 
-    private Cliente crearCliente(Long idCliente, Ciudad ciudadRecojo) {
-        Cliente cliente = new Cliente();
-        cliente.setId(idCliente);
-        cliente.setNombres("Cliente " + idCliente);
-        cliente.setCorreo("cliente" + idCliente + "@ejemplo.com");
-        cliente.setCiudadRecojo(ciudadRecojo);
-        return cliente;
+    /**
+     * Obtiene o crea un cliente. Si no existe en BD, lo crea y persiste.
+     * (Siguiendo el patrón del Backend de ejemplo)
+     */
+    private Cliente obtenerOCrearCliente(Long idCliente, Ciudad ciudadRecojo) {
+        // Intentar buscar el cliente existente en BD
+        try {
+            Cliente clienteExistente = clienteService.buscarPorId(idCliente);
+            if (clienteExistente != null) {
+                return clienteExistente;
+            }
+        } catch (Exception e) {
+            // Cliente no existe, continuar para crearlo
+        }
+        
+        // Si no existe, crear uno nuevo y persistirlo
+        Cliente nuevoCliente = new Cliente();
+        nuevoCliente.setId(idCliente);
+        nuevoCliente.setNombres("Cliente " + idCliente);
+        nuevoCliente.setCorreo("cliente" + idCliente + "@ejemplo.com");
+        nuevoCliente.setCiudadRecojo(ciudadRecojo);
+        nuevoCliente.setRol(Rol.CLIENTE);
+        nuevoCliente.setUsernameOrEmail("cliente" + idCliente);
+        nuevoCliente.setPassword("temporal"); // Password temporal
+        nuevoCliente.setActivo(true);
+        
+        // Persistir el cliente ANTES de usarlo
+        Long clienteId = clienteService.insertar(nuevoCliente);
+        
+        // Retornar el cliente recién persistido
+        return clienteService.buscarPorId(clienteId);
     }
 
     private LocalDateTime calcularFechaPedido(int hora, int minuto) {
@@ -139,6 +171,8 @@ public class LectorPedidos {
     private Pedido crearPedido(Cliente cliente, Aeropuerto aeropuertoDestino,
                                  LocalDateTime fechaPedido, LocalDateTime plazoEntrega) {
         Pedido pedido = new Pedido();
+        // Generar nombre automático (como en el Backend de ejemplo)
+        pedido.setNombre("PEDIDO-" + System.currentTimeMillis() + "-" + aleatorio.nextInt(1000));
         pedido.setCliente(cliente);
         pedido.setAeropuertoDestinoCodigo(aeropuertoDestino.getCodigoIATA());
         pedido.setFechaPedido(fechaPedido);
@@ -160,6 +194,9 @@ public class LectorPedidos {
         ArrayList<Producto> productos = new ArrayList<>();
         for (int i = 0; i < cantidad; i++) {
             Producto producto = new Producto();
+            producto.setNombre("PRODUCT-" + (i + 1)); // Nombre del producto
+            producto.setPeso(1.0); // Peso por defecto (como en el Backend de ejemplo)
+            producto.setVolumen(1.0); // Volumen por defecto (como en el Backend de ejemplo)
             producto.setEstado(EstadoProducto.EN_ALMACEN);
             producto.setPedido(pedido);
             productos.add(producto);

@@ -28,14 +28,14 @@ public class VueloServiceImpl implements VueloService {
 
     @Override
     @Transactional
-    public int insertar(Vuelo vuelo) {
+    public Integer insertar(Vuelo vuelo) {
         return vueloRepository.save(vuelo).getId();
     }
 
     @Override
     @Transactional
-    public Vuelo actualizar(int id, Vuelo vuelo) {
-        Vuelo existente = buscarPorId((long) id);
+    public Vuelo actualizar(Integer id, Vuelo vuelo) {
+        Vuelo existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Vuelo", "id", id);
         }
@@ -44,12 +44,12 @@ public class VueloServiceImpl implements VueloService {
     }
 
     @Override
-    public Vuelo buscarPorId(Long id) {
-        return vueloRepository.findById(id.intValue()).orElse(null);
+    public Vuelo buscarPorId(Integer id) {
+        return vueloRepository.findById(id).orElse(null);
     }
 
     @Override
-    public List<Vuelo> buscarPorRuta(Long origenId, Long destinoId) {
+    public List<Vuelo> buscarPorRuta(Integer origenId, Integer destinoId) {
         return vueloRepository.findByAeropuertoOrigenIdAndAeropuertoDestinoId(origenId, destinoId);
     }
 
@@ -59,7 +59,7 @@ public class VueloServiceImpl implements VueloService {
     }
 
     @Override
-    public List<Vuelo> buscarDisponibles(int capacidadMinima) {
+    public List<Vuelo> buscarDisponibles(Integer capacidadMinima) {
         return vueloRepository.findByCapacidadMaximaGreaterThanEqual(capacidadMinima);
     }
 
@@ -73,7 +73,7 @@ public class VueloServiceImpl implements VueloService {
 
     @Override
     @Transactional
-    public void eliminar(int id) {
+    public void eliminar(Integer id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Vuelo", "id", id);
         }
@@ -81,7 +81,7 @@ public class VueloServiceImpl implements VueloService {
     }
 
     @Override
-    public boolean existePorId(int id) {
+    public boolean existePorId(Integer id) {
         return vueloRepository.existsById(id);
     }
 

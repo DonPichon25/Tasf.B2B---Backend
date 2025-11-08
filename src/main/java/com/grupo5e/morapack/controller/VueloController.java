@@ -2,7 +2,9 @@ package com.grupo5e.morapack.controller;
 
 import com.grupo5e.morapack.api.dto.BulkResponseDTO;
 import com.grupo5e.morapack.api.dto.ErrorResponseDTO;
+import com.grupo5e.morapack.api.dto.VueloDTO;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
+import com.grupo5e.morapack.api.mapper.VueloMapper;
 import com.grupo5e.morapack.core.enums.EstadoVuelo;
 import com.grupo5e.morapack.core.model.Vuelo;
 import com.grupo5e.morapack.service.VueloService;
@@ -28,35 +30,40 @@ import java.util.stream.Collectors;
 public class VueloController {
 
     private final VueloService vueloService;
+    private final VueloMapper vueloMapper;
 
-    public VueloController(VueloService vueloService) {
+    public VueloController(VueloService vueloService, VueloMapper vueloMapper) {
         this.vueloService = vueloService;
+        this.vueloMapper = vueloMapper;
     }
 
-    @Operation(summary = "Listar todos los vuelos", description = "Obtiene una lista de todos los vuelos")
+    @Operation(summary = "Listar todos los vuelos", description = "Obtiene una lista de todos los vuelos como DTOs (sin lazy loading)")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista de vuelos obtenida exitosamente")
     })
     @GetMapping
-    public ResponseEntity<List<Vuelo>> listar() {
-        return ResponseEntity.ok(vueloService.listar());
+    public ResponseEntity<List<VueloDTO>> listar() {
+        List<VueloDTO> vuelos = vueloService.listar().stream()
+                .map(vueloMapper::toDTO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(vuelos);
     }
 
-    @Operation(summary = "Obtener vuelo por ID", description = "Obtiene un vuelo específico por su ID")
+    @Operation(summary = "Obtener vuelo por ID", description = "Obtiene un vuelo específico por su ID como DTO")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Vuelo encontrado"),
             @ApiResponse(responseCode = "404", description = "Vuelo no encontrado",
                     content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
     })
     @GetMapping("/{id}")
-    public ResponseEntity<Vuelo> obtenerPorId(
+    public ResponseEntity<VueloDTO> obtenerPorId(
             @Parameter(description = "ID del vuelo", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Vuelo vuelo = vueloService.buscarPorId(id);
         if (vuelo == null) {
             throw new ResourceNotFoundException("Vuelo", "id", id);
         }
-        return ResponseEntity.ok(vuelo);
+        return ResponseEntity.ok(vueloMapper.toDTO(vuelo));
     }
 
     @Operation(summary = "Buscar vuelos por ruta", description = "Busca vuelos entre dos aeropuertos específicos")
@@ -64,12 +71,15 @@ public class VueloController {
             @ApiResponse(responseCode = "200", description = "Vuelos encontrados")
     })
     @GetMapping("/ruta")
-    public ResponseEntity<List<Vuelo>> buscarPorRuta(
+    public ResponseEntity<List<VueloDTO>> buscarPorRuta(
             @Parameter(description = "ID del aeropuerto origen", required = true)
-            @RequestParam Long origenId,
+            @RequestParam Integer origenId,
             @Parameter(description = "ID del aeropuerto destino", required = true)
-            @RequestParam Long destinoId) {
-        return ResponseEntity.ok(vueloService.buscarPorRuta(origenId, destinoId));
+            @RequestParam Integer destinoId) {
+        List<VueloDTO> vuelos = vueloService.buscarPorRuta(origenId, destinoId).stream()
+                .map(vueloMapper::toDTO)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(vuelos);
     }
 
     @Operation(summary = "Obtener vuelos por estado", description = "Obtiene todos los vuelos con un estado específico")

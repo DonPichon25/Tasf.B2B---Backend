@@ -55,7 +55,7 @@ public class AeropuertoController {
     @GetMapping("/{id}")
     public ResponseEntity<Aeropuerto> obtener(
             @Parameter(description = "ID del aeropuerto", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Aeropuerto aeropuerto = service.buscarPorId(id);
         if (aeropuerto == null) {
             throw new ResourceNotFoundException("Aeropuerto", "id", id);
@@ -83,8 +83,8 @@ public class AeropuertoController {
             @ApiResponse(responseCode = "400", description = "Datos inválidos")
     })
     @PostMapping
-    public ResponseEntity<Long> insertar(@Valid @RequestBody Aeropuerto aeropuerto) {
-        Long id = service.insertar(aeropuerto);
+    public ResponseEntity<Integer> insertar(@Valid @RequestBody Aeropuerto aeropuerto) {
+        Integer id = service.insertar(aeropuerto);
         return ResponseEntity.status(HttpStatus.CREATED).body(id);
     }
 
@@ -96,7 +96,7 @@ public class AeropuertoController {
     @PutMapping("/{id}")
     public ResponseEntity<Aeropuerto> actualizar(
             @Parameter(description = "ID del aeropuerto", required = true)
-            @PathVariable Long id,
+            @PathVariable Integer id,
             @Valid @RequestBody Aeropuerto aeropuerto) {
         Aeropuerto actualizado = service.actualizar(id, aeropuerto);
         return ResponseEntity.ok(actualizado);
@@ -110,7 +110,7 @@ public class AeropuertoController {
     @PatchMapping("/{id}/toggle")
     public ResponseEntity<Aeropuerto> toggleEstado(
             @Parameter(description = "ID del aeropuerto", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Aeropuerto aeropuerto = service.toggleEstado(id);
         return ResponseEntity.ok(aeropuerto);
     }
@@ -123,7 +123,7 @@ public class AeropuertoController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(description = "ID del aeropuerto", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         service.eliminar(id);
         return ResponseEntity.noContent().build();
     }
@@ -134,11 +134,11 @@ public class AeropuertoController {
             @ApiResponse(responseCode = "400", description = "Error en validación de datos")
     })
     @PostMapping("/bulk")
-    public ResponseEntity<BulkResponseDTO<Long>> crearBulk(@Valid @RequestBody List<Aeropuerto> aeropuertos) {
+    public ResponseEntity<BulkResponseDTO<Integer>> crearBulk(@Valid @RequestBody List<Aeropuerto> aeropuertos) {
         List<Aeropuerto> creados = service.insertarBulk(aeropuertos);
-        List<Long> ids = creados.stream().map(Aeropuerto::getId).collect(Collectors.toList());
+        List<Integer> ids = creados.stream().map(Aeropuerto::getId).collect(Collectors.toList());
         
-        BulkResponseDTO<Long> response = BulkResponseDTO.<Long>builder()
+        BulkResponseDTO<Integer> response = BulkResponseDTO.<Integer>builder()
                 .totalProcesados(aeropuertos.size())
                 .exitosos(ids.size())
                 .fallidos(0)

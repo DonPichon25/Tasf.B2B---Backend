@@ -50,7 +50,7 @@ public class ProductoController {
     @GetMapping("/{id}")
     public ResponseEntity<Producto> obtenerPorId(
             @Parameter(description = "ID del producto", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Producto producto = productoService.buscarPorId(id);
         if (producto == null) {
             throw new ResourceNotFoundException("Producto", "id", id);
@@ -65,7 +65,7 @@ public class ProductoController {
     @GetMapping("/pedido/{pedidoId}")
     public ResponseEntity<List<Producto>> obtenerPorPedido(
             @Parameter(description = "ID del pedido", required = true)
-            @PathVariable Long pedidoId) {
+            @PathVariable Integer pedidoId) {
         return ResponseEntity.ok(productoService.buscarPorPedido(pedidoId));
     }
 
@@ -86,8 +86,8 @@ public class ProductoController {
             @ApiResponse(responseCode = "400", description = "Datos inválidos")
     })
     @PostMapping
-    public ResponseEntity<Long> crear(@Valid @RequestBody Producto producto) {
-        Long id = productoService.insertar(producto);
+    public ResponseEntity<Integer> crear(@Valid @RequestBody Producto producto) {
+        Integer id = productoService.insertar(producto);
         return ResponseEntity.status(HttpStatus.CREATED).body(id);
     }
 
@@ -99,7 +99,7 @@ public class ProductoController {
     @PutMapping("/{id}")
     public ResponseEntity<Producto> actualizar(
             @Parameter(description = "ID del producto", required = true)
-            @PathVariable Long id,
+            @PathVariable Integer id,
             @Valid @RequestBody Producto producto) {
         Producto actualizado = productoService.actualizar(id, producto);
         return ResponseEntity.ok(actualizado);
@@ -113,7 +113,7 @@ public class ProductoController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(description = "ID del producto", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         productoService.eliminar(id);
         return ResponseEntity.noContent().build();
     }
@@ -124,11 +124,11 @@ public class ProductoController {
             @ApiResponse(responseCode = "400", description = "Error en validación de datos")
     })
     @PostMapping("/bulk")
-    public ResponseEntity<BulkResponseDTO<Long>> crearBulk(@Valid @RequestBody List<Producto> productos) {
+    public ResponseEntity<BulkResponseDTO<Integer>> crearBulk(@Valid @RequestBody List<Producto> productos) {
         List<Producto> creados = productoService.insertarBulk(productos);
-        List<Long> ids = creados.stream().map(Producto::getId).collect(Collectors.toList());
+        List<Integer> ids = creados.stream().map(Producto::getId).collect(Collectors.toList());
         
-        BulkResponseDTO<Long> response = BulkResponseDTO.<Long>builder()
+        BulkResponseDTO<Integer> response = BulkResponseDTO.<Integer>builder()
                 .totalProcesados(productos.size())
                 .exitosos(ids.size())
                 .fallidos(0)

@@ -49,7 +49,7 @@ public class RutaController {
     @GetMapping("/{id}")
     public ResponseEntity<Ruta> obtenerPorId(
             @Parameter(description = "ID de la ruta", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Ruta ruta = rutaService.buscarPorId(id);
         if (ruta == null) {
             throw new ResourceNotFoundException("Ruta", "id", id);
@@ -64,7 +64,7 @@ public class RutaController {
     @GetMapping("/origen/{aeropuertoId}")
     public ResponseEntity<List<Ruta>> obtenerPorOrigen(
             @Parameter(description = "ID del aeropuerto origen", required = true)
-            @PathVariable Long aeropuertoId) {
+            @PathVariable Integer aeropuertoId) {
         return ResponseEntity.ok(rutaService.buscarPorAeropuertoOrigen(aeropuertoId));
     }
 
@@ -75,8 +75,74 @@ public class RutaController {
     @GetMapping("/destino/{aeropuertoId}")
     public ResponseEntity<List<Ruta>> obtenerPorDestino(
             @Parameter(description = "ID del aeropuerto destino", required = true)
-            @PathVariable Long aeropuertoId) {
+            @PathVariable Integer aeropuertoId) {
         return ResponseEntity.ok(rutaService.buscarPorAeropuertoDestino(aeropuertoId));
+    }
+    
+    @Operation(summary = "Obtener rutas por solución", description = "Obtiene todas las rutas de una solución específica")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rutas de la solución encontradas")
+    })
+    @GetMapping("/solucion/{solucionId}")
+    public ResponseEntity<List<Ruta>> obtenerPorSolucion(
+            @Parameter(description = "ID de la solución", required = true)
+            @PathVariable Integer solucionId) {
+        return ResponseEntity.ok(rutaService.buscarPorSolucionId(solucionId));
+    }
+    
+    @Operation(summary = "Obtener rutas por vuelo", description = "Obtiene todas las rutas que usan un vuelo específico")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rutas que usan el vuelo encontradas")
+    })
+    @GetMapping("/vuelo/{vueloId}")
+    public ResponseEntity<List<Ruta>> obtenerPorVuelo(
+            @Parameter(description = "ID del vuelo", required = true)
+            @PathVariable Integer vueloId) {
+        return ResponseEntity.ok(rutaService.buscarPorVueloId(vueloId));
+    }
+    
+    @Operation(summary = "Obtener rutas por pedido", description = "Obtiene todas las rutas que transportan un pedido específico")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rutas del pedido encontradas")
+    })
+    @GetMapping("/pedido/{pedidoId}")
+    public ResponseEntity<List<Ruta>> obtenerPorPedido(
+            @Parameter(description = "ID del pedido", required = true)
+            @PathVariable Integer pedidoId) {
+        return ResponseEntity.ok(rutaService.buscarPorPedidoId(pedidoId));
+    }
+    
+    @Operation(summary = "Obtener rutas por rango de tiempo", description = "Filtra rutas en un rango de tiempo total")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rutas filtradas por tiempo")
+    })
+    @GetMapping("/tiempo")
+    public ResponseEntity<List<Ruta>> obtenerPorRangoTiempo(
+            @Parameter(description = "Tiempo mínimo en horas", required = true) @RequestParam Double min,
+            @Parameter(description = "Tiempo máximo en horas", required = true) @RequestParam Double max) {
+        return ResponseEntity.ok(rutaService.buscarPorRangoTiempo(min, max));
+    }
+    
+    @Operation(summary = "Obtener rutas por rango de costo", description = "Filtra rutas en un rango de costo total")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rutas filtradas por costo")
+    })
+    @GetMapping("/costo")
+    public ResponseEntity<List<Ruta>> obtenerPorRangoCosto(
+            @Parameter(description = "Costo mínimo", required = true) @RequestParam Double min,
+            @Parameter(description = "Costo máximo", required = true) @RequestParam Double max) {
+        return ResponseEntity.ok(rutaService.buscarPorRangoCosto(min, max));
+    }
+    
+    @Operation(summary = "Obtener rutas entre dos aeropuertos", description = "Busca rutas directas entre aeropuerto origen y destino")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Rutas entre los aeropuertos")
+    })
+    @GetMapping("/ruta")
+    public ResponseEntity<List<Ruta>> obtenerPorOrigenYDestino(
+            @Parameter(description = "ID del aeropuerto origen", required = true) @RequestParam Integer origenId,
+            @Parameter(description = "ID del aeropuerto destino", required = true) @RequestParam Integer destinoId) {
+        return ResponseEntity.ok(rutaService.buscarPorOrigenYDestino(origenId, destinoId));
     }
 
     @Operation(summary = "Crear nueva ruta", description = "Registra una nueva ruta en el sistema")

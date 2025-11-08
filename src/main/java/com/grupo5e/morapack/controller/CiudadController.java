@@ -50,7 +50,7 @@ public class CiudadController {
     @GetMapping("/{id}")
     public ResponseEntity<Ciudad> obtenerPorId(
             @Parameter(description = "ID de la ciudad", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         Ciudad ciudad = ciudadService.buscarPorId(id);
         if (ciudad == null) {
             throw new ResourceNotFoundException("Ciudad", "id", id);
@@ -78,8 +78,8 @@ public class CiudadController {
             @ApiResponse(responseCode = "400", description = "Datos inválidos")
     })
     @PostMapping
-    public ResponseEntity<Long> crear(@Valid @RequestBody Ciudad ciudad) {
-        Long id = ciudadService.insertar(ciudad);
+    public ResponseEntity<Integer> crear(@Valid @RequestBody Ciudad ciudad) {
+        Integer id = ciudadService.insertar(ciudad);
         return ResponseEntity.status(HttpStatus.CREATED).body(id);
     }
 
@@ -91,7 +91,7 @@ public class CiudadController {
     @PutMapping("/{id}")
     public ResponseEntity<Ciudad> actualizar(
             @Parameter(description = "ID de la ciudad", required = true)
-            @PathVariable Long id,
+            @PathVariable Integer id,
             @Valid @RequestBody Ciudad ciudad) {
         Ciudad actualizada = ciudadService.actualizar(id, ciudad);
         return ResponseEntity.ok(actualizada);
@@ -105,7 +105,7 @@ public class CiudadController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminar(
             @Parameter(description = "ID de la ciudad", required = true)
-            @PathVariable Long id) {
+            @PathVariable Integer id) {
         ciudadService.eliminar(id);
         return ResponseEntity.noContent().build();
     }

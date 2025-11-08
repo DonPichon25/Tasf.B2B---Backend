@@ -26,14 +26,14 @@ public class RutaServiceImpl implements RutaService {
 
     @Override
     @Transactional
-    public int insertar(Ruta ruta) {
+    public Integer insertar(Ruta ruta) {
         return rutaRepository.save(ruta).getId();
     }
 
     @Override
     @Transactional
-    public Ruta actualizar(int id, Ruta ruta) {
-        Ruta existente = buscarPorId((long) id);
+    public Ruta actualizar(Integer id, Ruta ruta) {
+        Ruta existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Ruta", "id", id);
         }
@@ -42,23 +42,23 @@ public class RutaServiceImpl implements RutaService {
     }
 
     @Override
-    public Ruta buscarPorId(Long id) {
-        return rutaRepository.findById(id.intValue()).orElse(null);
+    public Ruta buscarPorId(Integer id) {
+        return rutaRepository.findById(id).orElse(null);
     }
 
     @Override
-    public List<Ruta> buscarPorAeropuertoOrigen(Long aeropuertoId) {
+    public List<Ruta> buscarPorAeropuertoOrigen(Integer aeropuertoId) {
         return rutaRepository.findByAeropuertoOrigenId(aeropuertoId);
     }
 
     @Override
-    public List<Ruta> buscarPorAeropuertoDestino(Long aeropuertoId) {
+    public List<Ruta> buscarPorAeropuertoDestino(Integer aeropuertoId) {
         return rutaRepository.findByAeropuertoDestinoId(aeropuertoId);
     }
 
     @Override
     @Transactional
-    public void eliminar(int id) {
+    public void eliminar(Integer id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Ruta", "id", id);
         }
@@ -66,7 +66,7 @@ public class RutaServiceImpl implements RutaService {
     }
 
     @Override
-    public boolean existePorId(int id) {
+    public boolean existePorId(Integer id) {
         return rutaRepository.existsById(id);
     }
 
@@ -74,5 +74,37 @@ public class RutaServiceImpl implements RutaService {
     @Transactional
     public List<Ruta> insertarBulk(List<Ruta> rutas) {
         return rutaRepository.saveAll(rutas).stream().collect(Collectors.toList());
+    }
+    
+    // Nuevos métodos siguiendo patrón Backend
+    
+    @Override
+    public List<Ruta> buscarPorSolucionId(Integer solucionId) {
+        return rutaRepository.findBySolucionId(solucionId);
+    }
+    
+    @Override
+    public List<Ruta> buscarPorVueloId(Integer vueloId) {
+        return rutaRepository.findByVueloId(vueloId);
+    }
+    
+    @Override
+    public List<Ruta> buscarPorPedidoId(Integer pedidoId) {
+        return rutaRepository.findByPedidoId(pedidoId);
+    }
+    
+    @Override
+    public List<Ruta> buscarPorRangoTiempo(Double min, Double max) {
+        return rutaRepository.findByTiempoTotalBetween(min, max);
+    }
+    
+    @Override
+    public List<Ruta> buscarPorRangoCosto(Double min, Double max) {
+        return rutaRepository.findByCostoTotalBetween(min, max);
+    }
+    
+    @Override
+    public List<Ruta> buscarPorOrigenYDestino(Integer origenId, Integer destinoId) {
+        return rutaRepository.findByOrigenAndDestino(origenId, destinoId);
     }
 }

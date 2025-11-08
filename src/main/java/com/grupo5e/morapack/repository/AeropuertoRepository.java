@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface AeropuertoRepository extends JpaRepository<Aeropuerto, Long> {
+public interface AeropuertoRepository extends JpaRepository<Aeropuerto, Integer> {
     Optional<Aeropuerto> findByCodigoIATA(String codigoIATA);
     List<Aeropuerto> findByEstado(EstadoAeropuerto estado);
 }

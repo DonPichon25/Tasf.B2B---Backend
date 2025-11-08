@@ -27,13 +27,13 @@ public class PedidoServiceImpl implements PedidoService {
 
     @Override
     @Transactional
-    public Long insertar(Pedido pedido) {
+    public Integer insertar(Pedido pedido) {
         return pedidoRepository.save(pedido).getId();
     }
 
     @Override
     @Transactional
-    public Pedido actualizar(Long id, Pedido pedido) {
+    public Pedido actualizar(Integer id, Pedido pedido) {
         Pedido existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Pedido", "id", id);
@@ -43,7 +43,7 @@ public class PedidoServiceImpl implements PedidoService {
     }
 
     @Override
-    public Pedido buscarPorId(Long id) {
+    public Pedido buscarPorId(Integer id) {
         return pedidoRepository.findById(id).orElse(null);
     }
 
@@ -59,7 +59,7 @@ public class PedidoServiceImpl implements PedidoService {
 
     @Override
     @Transactional
-    public Pedido actualizarEstado(Long id, EstadoPedido nuevoEstado) {
+    public Pedido actualizarEstado(Integer id, EstadoPedido nuevoEstado) {
         Pedido pedido = buscarPorId(id);
         if (pedido == null) {
             throw new ResourceNotFoundException("Pedido", "id", id);
@@ -70,7 +70,7 @@ public class PedidoServiceImpl implements PedidoService {
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(Integer id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Pedido", "id", id);
         }
@@ -78,7 +78,7 @@ public class PedidoServiceImpl implements PedidoService {
     }
 
     @Override
-    public boolean existePorId(Long id) {
+    public boolean existePorId(Integer id) {
         return pedidoRepository.existsById(id);
     }
 
@@ -86,5 +86,17 @@ public class PedidoServiceImpl implements PedidoService {
     @Transactional
     public List<Pedido> insertarBulk(List<Pedido> pedidos) {
         return pedidoRepository.saveAll(pedidos).stream().collect(Collectors.toList());
+    }
+    
+    /**
+     * OPTIMIZACIÓN: Buscar múltiples pedidos por IDs en una sola query.
+     * Usa findAllById() de JpaRepository que genera un query eficiente con IN clause.
+     */
+    @Override
+    public List<Pedido> buscarPorIds(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return pedidoRepository.findAllById(ids);
     }
 }

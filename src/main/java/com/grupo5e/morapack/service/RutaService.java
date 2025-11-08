@@ -6,12 +6,20 @@ import java.util.List;
 
 public interface RutaService {
     List<Ruta> listar();
-    int insertar(Ruta ruta);
-    Ruta actualizar(int id, Ruta ruta);
-    Ruta buscarPorId(Long id);
-    List<Ruta> buscarPorAeropuertoOrigen(Long aeropuertoId);
-    List<Ruta> buscarPorAeropuertoDestino(Long aeropuertoId);
-    void eliminar(int id);
-    boolean existePorId(int id);
+    Integer insertar(Ruta ruta);
+    Ruta actualizar(Integer id, Ruta ruta);
+    Ruta buscarPorId(Integer id);
+    List<Ruta> buscarPorAeropuertoOrigen(Integer aeropuertoId);
+    List<Ruta> buscarPorAeropuertoDestino(Integer aeropuertoId);
+    void eliminar(Integer id);
+    boolean existePorId(Integer id);
     List<Ruta> insertarBulk(List<Ruta> rutas);
+    
+    // Nuevos métodos siguiendo patrón Backend
+    List<Ruta> buscarPorSolucionId(Integer solucionId);
+    List<Ruta> buscarPorVueloId(Integer vueloId);
+    List<Ruta> buscarPorPedidoId(Integer pedidoId);
+    List<Ruta> buscarPorRangoTiempo(Double min, Double max);
+    List<Ruta> buscarPorRangoCosto(Double min, Double max);
+    List<Ruta> buscarPorOrigenYDestino(Integer origenId, Integer destinoId);
 }
