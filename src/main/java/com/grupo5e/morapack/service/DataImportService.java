@@ -248,7 +248,6 @@ public class DataImportService {
     @Transactional
     public Map<String, Object> importFlights(MultipartFile file) {
         Map<String, Object> result = new HashMap<>();
-        Path tempFile = null;
         
         try {
             log.info("✈️ Iniciando importación de vuelos...");
@@ -265,13 +264,12 @@ public class DataImportService {
             
             log.info("   Aeropuertos disponibles en BD: {}", aeropuertos.size());
             
-            // 2. Guardar archivo temporal y usar LectorVuelos
-            tempFile = guardarArchivoTemporal(file);
-            LectorVuelos lector = new LectorVuelos(
-                tempFile.toString(),
-                new ArrayList<>(aeropuertos)
+            // 2. OPTIMIZADO: Leer vuelos directamente desde InputStream (sin archivo temporal)
+            // Esto mejora el rendimiento evitando I/O de disco innecesario
+            List<Vuelo> vuelos = LectorVuelos.leerVuelosDesdeStream(
+                file.getInputStream(),
+                aeropuertos
             );
-            ArrayList<Vuelo> vuelos = lector.leerVuelos();
             
             if (vuelos.isEmpty()) {
                 result.put("success", false);
@@ -295,13 +293,10 @@ public class DataImportService {
                 return result;
             }
             
-            // 5. Validar tiempos PACK (con advertencias, no bloquear)
-            int vuelosPACKCompliant = 0;
-            for (Vuelo vuelo : vuelos) {
-                if (PACKTimeValidator.validateFullPACKCompliance(vuelo)) {
-                    vuelosPACKCompliant++;
-                }
-            }
+            // 5. OPTIMIZADO: Validar tiempos PACK en paralelo (solo informativo, no bloquea)
+            long vuelosPACKCompliant = vuelos.parallelStream()
+                .filter(PACKTimeValidator::validateFullPACKCompliance)
+                .count();
             log.info("   📊 {} de {} vuelos cumplen estándares PACK ({}%)", 
                 vuelosPACKCompliant, vuelos.size(), 
                 vuelos.size() > 0 ? (vuelosPACKCompliant * 100 / vuelos.size()) : 0);
@@ -325,9 +320,8 @@ public class DataImportService {
             result.put("success", false);
             result.put("message", "Error: " + e.getMessage());
             result.put("error", e.getClass().getSimpleName());
-        } finally {
-            eliminarArchivoTemporal(tempFile);
         }
+        // Ya no necesitamos limpiar archivo temporal porque leemos directamente del stream
         
         return result;
     }
