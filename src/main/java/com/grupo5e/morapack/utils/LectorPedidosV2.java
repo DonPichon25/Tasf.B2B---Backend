@@ -255,6 +255,11 @@ public class LectorPedidosV2 {
 
         // Crear pedido
         Pedido pedido = new Pedido();
+        
+        // Generar externalId compuesto: {AIRPORT_ORIGIN}-{FILE_ORDER_ID}
+        String externalId = aeropuertoOrigen.getCodigoIATA() + "-" + idPedidoStr;
+        pedido.setExternalId(externalId);
+        
         pedido.setNombre("PEDIDO-" + idPedidoStr + "-" + codigoAeropuertoDestino);
         pedido.setCliente(cliente);
         pedido.setAeropuertoOrigenCodigo(aeropuertoOrigen.getCodigoIATA());
