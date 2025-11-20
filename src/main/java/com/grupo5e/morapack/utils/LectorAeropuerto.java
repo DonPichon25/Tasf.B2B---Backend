@@ -152,7 +152,9 @@ public class LectorAeropuerto {
                     if (ciudad == null) {
                         ciudad = new Ciudad();
                         // NO setear el ID manualmente, Hibernate lo genera automáticamente
+                        ciudad.setCodigo(alias.toUpperCase());  // Código de ciudad (ej: "QUIT", "LIMA")
                         ciudad.setNombre(nombreCiudad);
+                        ciudad.setPais(nombrePais);  // País (ej: "Ecuador", "Perú")
                         ciudad.setContinente(continenteActual);
                         mapaCiudades.put(claveCiudad, ciudad);
                     }
