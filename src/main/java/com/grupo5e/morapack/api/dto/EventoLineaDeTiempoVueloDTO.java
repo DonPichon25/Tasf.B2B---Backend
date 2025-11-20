@@ -53,5 +53,11 @@ public class EventoLineaDeTiempoVueloDTO {
     
     @Schema(description = "Tiempo de transporte en días")
     private Double tiempoTransporteDias;
+    
+    @Schema(description = "Capacidad máxima del vuelo en productos", example = "300")
+    private Integer capacidadMaxima;
+    
+    @Schema(description = "Cantidad de productos en este vuelo", example = "2")
+    private Integer cantidadProductos;
 }
 

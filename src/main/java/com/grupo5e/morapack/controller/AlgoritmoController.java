@@ -550,7 +550,8 @@ public class AlgoritmoController {
                 .tipoEvento("DEPARTURE")
                 .horaEvento(grupo.horaSalida)
                 .idVuelo(vuelo.getId())
-                .codigoVuelo(vuelo.getCodigo() + " (" + grupo.idsProductos.size() + " pkgs)")
+                .codigoVuelo(vuelo.getCodigo())
+                .cantidadProductos(grupo.idsProductos.size())
                 .idProducto(grupo.idsProductos.get(0)) // Producto representativo
                 .idPedido(grupo.idsPedidos.get(0))
                 .ciudadOrigen(vuelo.getCodigoOrigen())
@@ -559,6 +560,7 @@ public class AlgoritmoController {
                 .idAeropuertoDestino(vuelo.getIdAeropuertoDestino())
                 .tiempoTransporteDias(vuelo.getTiempoTransporte() != null ? 
                     vuelo.getTiempoTransporte() / 24.0 : 0.0)
+                .capacidadMaxima(vuelo.getCapacidadMaxima())
                 .build();
             
             eventos.add(eventoSalida);
@@ -569,7 +571,8 @@ public class AlgoritmoController {
                 .tipoEvento("ARRIVAL")
                 .horaEvento(grupo.horaLlegada)
                 .idVuelo(vuelo.getId())
-                .codigoVuelo(vuelo.getCodigo() + " (" + grupo.idsProductos.size() + " pkgs)")
+                .codigoVuelo(vuelo.getCodigo())
+                .cantidadProductos(grupo.idsProductos.size())
                 .idProducto(grupo.idsProductos.get(0))
                 .idPedido(grupo.idsPedidos.get(0))
                 .ciudadOrigen(vuelo.getCodigoOrigen())
@@ -578,6 +581,7 @@ public class AlgoritmoController {
                 .idAeropuertoDestino(vuelo.getIdAeropuertoDestino())
                 .tiempoTransporteDias(vuelo.getTiempoTransporte() != null ? 
                     vuelo.getTiempoTransporte() / 24.0 : 0.0)
+                .capacidadMaxima(vuelo.getCapacidadMaxima())
                 .build();
             
             eventos.add(eventoLlegada);
