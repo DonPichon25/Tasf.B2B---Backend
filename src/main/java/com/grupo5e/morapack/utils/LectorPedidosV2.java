@@ -6,6 +6,7 @@ import com.grupo5e.morapack.core.enums.Rol;
 import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.service.ClienteService;
 import com.grupo5e.morapack.service.PedidoService;
+import com.grupo5e.morapack.service.impl.BatchService;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -39,6 +40,7 @@ public class LectorPedidosV2 {
     // Servicios necesarios
     private final PedidoService pedidoService;
     private final ClienteService clienteService;
+    private final BatchService batchService;
 
     // Caché de clientes para evitar búsquedas repetidas
     private final Map<String, Cliente> cacheClientes = new HashMap<>();
@@ -49,11 +51,13 @@ public class LectorPedidosV2 {
     public LectorPedidosV2(String directorioDatos,
                           ArrayList<Aeropuerto> aeropuertos,
                           PedidoService pedidoService,
-                          ClienteService clienteService) {
+                          ClienteService clienteService,
+                          BatchService batchService) {
         this.directorioDatos = directorioDatos;
         this.aeropuertos = aeropuertos;
         this.pedidoService = pedidoService;
         this.clienteService = clienteService;
+        this.batchService = batchService;
         this.mapaAeropuertos = crearMapaAeropuertos();
     }
 
@@ -201,8 +205,8 @@ public class LectorPedidosV2 {
                         guardarClientesPendientes();
                     }
 
-                    // Guardar en lotes de 100 para mejor rendimiento
-                    if (pedidosPorCrear.size() >= 100) {
+                    // 🚀 OPTIMIZADO: Lotes de 500 para mejor aprovechamiento del batch
+                    if (pedidosPorCrear.size() >= 500) {
                         // CRÍTICO: Guardar clientes pendientes ANTES de guardar pedidos
                         // para evitar errores
                         if (!clientesNuevosPendientes.isEmpty()) {
@@ -289,6 +293,9 @@ public class LectorPedidosV2 {
         // Calcular prioridad
         double prioridad = calcularPrioridad(fechaPedido, fechaLimiteEntrega);
         pedido.setPrioridad(prioridad);
+
+        // ⚠️ CRÍTICO: Sincronizar cantidadProductos ANTES de crear productos
+        pedido.setCantidadProductos(cantidadProductos);
 
         // Crear productos
         ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido);
@@ -414,13 +421,17 @@ public class LectorPedidosV2 {
                         pedido.setCliente(clientePersistido);
                     }
                 }
+                
+                // ✅ OPTIMIZACIÓN: Sincronizar cantidadProductos antes de guardar
+                // Esto asegura que el campo esté actualizado en BD
+                pedido.sincronizarCantidadProductos();
             }
             
-            // OPTIMIZACIÓN: Usar batch insert en lugar de insertar uno por uno
-            // Esto reduce de N queries a ~N/1000 queries (según batch_size configurado)
-            List<Pedido> pedidosGuardados = pedidoService.insertarBulk(pedidos);
-            resultado.pedidosCreados += pedidosGuardados.size();
-            System.out.println("  ✅ Lote de " + pedidosGuardados.size() + " pedidos guardados en batch");
+            //OPTIMIZACIÓN: Usar JDBC batch real con EntityManager , revisar bien q ue sea util para este caso:c
+            // Esto reduce de N queries individuales a verdaderos batch statements
+            int insertados = batchService.insertarPedidosEnBatch(pedidos);
+            resultado.pedidosCreados += insertados;
+            System.out.println("  ✅ Lote de " + insertados + " pedidos guardados en batch real (JDBC)");
         } catch (Exception e) {
             System.err.println("  ❌ Error guardando lote de pedidos: " + e.getMessage());
             e.printStackTrace();

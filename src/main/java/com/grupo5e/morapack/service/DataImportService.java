@@ -47,6 +47,7 @@ public class DataImportService {
     private final CancelacionRepository cancelacionRepository;
     private final com.grupo5e.morapack.repository.AlmacenRepository almacenRepository;
     private final CancelacionService cancelacionService;
+    private final com.grupo5e.morapack.service.impl.BatchService batchService;
 
     /**
      * Guarda MultipartFile a archivo temporal
@@ -302,19 +303,14 @@ public class DataImportService {
                 vuelosPACKCompliant, vuelos.size(), 
                 vuelos.size() > 0 ? (vuelosPACKCompliant * 100 / vuelos.size()) : 0);
             
-            // 4. Guardar vuelos en BD (IDs auto-generados)
-            List<Vuelo> vuelosGuardados = vueloService.insertarBulk(vuelos);
+            // 4. OPTIMIZADO: Guardar vuelos en BD con batch real
+            int vuelosInsertados = batchService.insertarVuelosEnBatch(vuelos);
             
             result.put("success", true);
             result.put("message", "Vuelos importados exitosamente");
-            result.put("count", vuelosGuardados.size());
+            result.put("count", vuelosInsertados);
             
-            log.info("✅ {} vuelos importados con IDs: {}", 
-                     vuelosGuardados.size(),
-                     vuelosGuardados.stream()
-                         .limit(3)
-                         .map(v -> v.getId() + ":" + v.getAeropuertoOrigen().getCodigoIATA() + "-" + v.getAeropuertoDestino().getCodigoIATA())
-                         .collect(Collectors.joining(", ")));
+            log.info("✅ {} vuelos importados exitosamente", vuelosInsertados);
             
         } catch (Exception e) {
             log.error("❌ Error importando vuelos", e);
@@ -492,7 +488,8 @@ public class DataImportService {
                     tempDir.toString(),
                     new ArrayList<>(aeropuertos),
                     pedidoService,
-                    clienteService
+                    clienteService,
+                    batchService
                 );
                 
                 // Cargar con filtros de tiempo si se especificaron

@@ -21,7 +21,8 @@ import java.util.List;
 @Table(name = "pedidos")
 public class Pedido {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "pedido_seq")
+    @SequenceGenerator(name = "pedido_seq", sequenceName = "pedidos_id_seq", allocationSize = 50)
     private Integer id;
 
     @Column(name = "external_id", unique = true, length = 50)
@@ -66,7 +67,8 @@ public class Pedido {
     private double prioridad;
 
     // Relación: un paquete puede contener varios productos
-    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    // OPTIMIZACIÓN: LAZY para evitar problema N+1 (cargar productos solo cuando se necesiten)
+    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Producto> productos;
 
     // Relación: un pedido puede tener varios planes de viaje (histórico)
@@ -74,4 +76,55 @@ public class Pedido {
     private List<PlanViaje> planesViaje;
 
     private int cantidadProductos;
+    
+    // ===================================================================
+    // MÉTODOS DE OPTIMIZACIÓN
+    // ===================================================================
+    
+    /**
+     * OPTIMIZACIÓN: Obtiene la cantidad de productos SIN cargar la lista
+     * 
+     * Usa el campo cantidadProductos directo (si está disponible) para evitar
+     * un query adicional a la tabla productos.
+     * 
+     * Úsalo en el algoritmo en lugar de getProductos().size()
+     * 
+     * @return Cantidad de productos del pedido
+     */
+    public int getCantidadProductosRapido() {
+        // Prioridad 1: Usar campo directo (más rápido)
+        if (this.cantidadProductos > 0) {
+            return this.cantidadProductos;
+        }
+        
+        // Prioridad 2: Si el campo está en 0 pero hay productos cargados
+        if (this.productos != null && !this.productos.isEmpty()) {
+            return this.productos.size();
+        }
+        
+        // Prioridad 3: Default a 1 (para compatibilidad)
+        return 1;
+    }
+    
+    /**
+     * OPTIMIZACIÓN: Verifica si tiene productos SIN cargarlos
+     * 
+     * @return true si tiene al menos un producto
+     */
+    public boolean tieneProductos() {
+        return this.cantidadProductos > 0;
+    }
+    
+    /**
+     * HELPER: Asegura que cantidadProductos esté sincronizado
+     * Llamar esto ANTES de persistir el pedido
+     */
+    public void sincronizarCantidadProductos() {
+        if (this.productos != null && !this.productos.isEmpty()) {
+            this.cantidadProductos = this.productos.size();
+        } else if (this.cantidadProductos == 0) {
+            // Si no hay productos cargados ni cantidad, default a 1
+            this.cantidadProductos = 1;
+        }
+    }
 }

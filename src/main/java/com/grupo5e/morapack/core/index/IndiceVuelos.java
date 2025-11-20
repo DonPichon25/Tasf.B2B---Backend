@@ -126,6 +126,16 @@ public class IndiceVuelos {
         return origen.getCodigoIATA() + "-" + destino.getCodigoIATA();
     }
     
+    /**
+     * OPTIMIZACIÓN: Obtiene todas las claves de rutas indexadas.
+     * Útil para pre-carga de cache de disponibilidad.
+     * 
+     * @return Set de claves de rutas en formato "ORIGEN-DESTINO"
+     */
+    public java.util.Set<String> obtenerTodasClaves() {
+        return vuelosPorRuta.keySet();
+    }
+    
     // ========== Métodos de estadísticas y debugging ==========
     
     /**

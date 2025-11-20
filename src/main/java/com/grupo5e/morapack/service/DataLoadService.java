@@ -28,6 +28,7 @@ public class DataLoadService {
     private final PedidoService pedidoService;
     private final ClienteService clienteService;
     private final AeropuertoService aeropuertoService;
+    private final com.grupo5e.morapack.service.impl.BatchService batchService;
     
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DataLoadService.class);
 
@@ -80,7 +81,8 @@ public class DataLoadService {
                     directorioArchivos,
                     aeropuertos,
                     pedidoService,
-                    clienteService
+                    clienteService,
+                    batchService
             );
 
             LectorPedidosV2.ResultadoCargaPedidos resultadoLector = 

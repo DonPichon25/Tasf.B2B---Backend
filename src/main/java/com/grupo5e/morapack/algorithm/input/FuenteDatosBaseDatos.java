@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -153,13 +152,16 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
     @Transactional(readOnly = true)
     public List<Pedido> cargarPedidos(List<Aeropuerto> aeropuertos) {
         try {
+            // ⚠️ ADVERTENCIA: Cargar TODOS los pedidos puede ser lento con datasets grandes
+            // Considera usar cargarPedidosPorVentanaDeTiempo() en su lugar
+            
             List<Pedido> pedidos = pedidoRepository.findAll();
             
-            // ✅ Forzar inicialización de relaciones LAZY y contar productos
+            // ✅ Forzar inicialización de relaciones LAZY NECESARIAS
             // La anotación @Transactional mantiene la sesión de Hibernate abierta
             int totalProductos = 0;
             for (Pedido pedido : pedidos) {
-                // Forzar carga de cliente
+                // Forzar carga de cliente (necesario)
                 if (pedido.getCliente() != null) {
                     pedido.getCliente().getNombres();
                     if (pedido.getCliente().getCiudadRecojo() != null) {
@@ -167,13 +169,14 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
                     }
                 }
                 
-                // Productos ya son EAGER, pero contémoslos
-                int cantProductos = (pedido.getProductos() != null) ? pedido.getProductos().size() : 0;
+                // ⚡ OPTIMIZACIÓN: NO cargar productos aquí
+                // Usar cantidadProductos directo (campo en tabla pedidos)
+                int cantProductos = pedido.getCantidadProductosRapido();
                 totalProductos += cantProductos;
             }
             
             System.out.println("✓ Cargados " + pedidos.size() + " pedidos desde BD (con relaciones inicializadas)");
-            System.out.println("✓ Total productos en todos los pedidos: " + totalProductos);
+            System.out.println("✓ Total productos en todos los pedidos: " + totalProductos + " (sin cargar lista)");
             
             return pedidos;
         } catch (Exception e) {
@@ -184,7 +187,7 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
     }
     
     /**
-     * Implementación optimizada para cargar pedidos por ventana de tiempo
+     * 🚀 OPTIMIZADO: Implementación optimizada para cargar pedidos por ventana de tiempo
      * Usa query custom en lugar de cargar todo y filtrar en memoria
      */
     @Override
@@ -195,32 +198,48 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
             LocalDateTime horaFin) {
         try {
             System.out.println("========================================");
-            System.out.println("CARGANDO PEDIDOS CON VENTANA DE TIEMPO");
+            System.out.println("CARGANDO PEDIDOS CON VENTANA DE TIEMPO (OPTIMIZADO)");
             System.out.println("Hora inicio: " + horaInicio);
             System.out.println("Hora fin: " + horaFin);
             System.out.println("========================================");
             
-            // ✅ Query optimizada: solo carga pedidos dentro de la ventana
+            long startTime = System.currentTimeMillis();
+            
+            // ⚡ OPTIMIZACIÓN 1: Query optimizada - solo pedidos en ventana
             List<Pedido> pedidos = pedidoRepository.findByFechaPedidoBetween(horaInicio, horaFin);
             
-            // ✅ Forzar inicialización de relaciones LAZY
-            int totalProductos = 0;
+            long queryTime = System.currentTimeMillis();
+            System.out.println("⏱️  Query ejecutada en " + (queryTime - startTime) + "ms");
+            
+            // ⚡ OPTIMIZACIÓN 2: Contar productos SIN cargarlos
+            // Usar el campo cantidadProductos directo
+            Long totalProductosQuery = pedidoRepository.sumarCantidadProductosEnRango(horaInicio, horaFin);
+            int totalProductos = (totalProductosQuery != null) ? totalProductosQuery.intValue() : 0;
+            
+            long countTime = System.currentTimeMillis();
+            System.out.println("⏱️  Conteo de productos en " + (countTime - queryTime) + "ms");
+            
+            // ✅ Forzar inicialización solo de relaciones NECESARIAS (cliente, ciudad)
             for (Pedido pedido : pedidos) {
-                // Forzar carga de cliente
+                // Forzar carga de cliente (necesario para el algoritmo)
                 if (pedido.getCliente() != null) {
                     pedido.getCliente().getNombres();
                     if (pedido.getCliente().getCiudadRecojo() != null) {
                         pedido.getCliente().getCiudadRecojo().getNombre();
                     }
                 }
-                
-                // Contar productos
-                int cantProductos = (pedido.getProductos() != null) ? pedido.getProductos().size() : 0;
-                totalProductos += cantProductos;
+                // ⚡ NO cargar productos - se cargarán LAZY solo si se necesitan
             }
             
-            System.out.println("✓ Cargados " + pedidos.size() + " pedidos en ventana de tiempo");
-            System.out.println("✓ Total productos: " + totalProductos);
+            long initTime = System.currentTimeMillis();
+            System.out.println("⏱️  Inicialización de relaciones en " + (initTime - countTime) + "ms");
+            
+            System.out.println("========================================");
+            System.out.println("✅ CARGA COMPLETADA");
+            System.out.println("✓ Pedidos cargados: " + pedidos.size());
+            System.out.println("✓ Total productos: " + totalProductos + " (conteo optimizado)");
+            System.out.println("✓ Tiempo total: " + (initTime - startTime) + "ms");
+            System.out.println("========================================");
             
             return pedidos;
         } catch (Exception e) {

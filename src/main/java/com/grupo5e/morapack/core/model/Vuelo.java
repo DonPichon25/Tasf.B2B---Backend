@@ -23,7 +23,8 @@ import java.time.LocalTime;
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "rutas"})
 public class Vuelo {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "vuelo_seq")
+    @SequenceGenerator(name = "vuelo_seq", sequenceName = "vuelos_id_seq", allocationSize = 50)
     private Integer id;
 
     // Número de frecuencias por día (ejemplo: 2 vuelos diarios)
