@@ -1,6 +1,10 @@
 package com.grupo5e.morapack.controller;
 
+import com.grupo5e.morapack.core.enums.EstadoProducto;
+import com.grupo5e.morapack.core.model.Producto;
 import com.grupo5e.morapack.service.DataLoadService;
+import com.grupo5e.morapack.core.model.Pedido;
+import com.grupo5e.morapack.service.PedidoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -16,7 +20,10 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -26,8 +33,6 @@ import java.util.Map;
  * Flujo típico:
  * 1. POST /api/datos/cargar-pedidos (carga archivos de pedidos a BD)
  * 2. POST /api/algoritmo/daily o /weekly (algoritmo lee desde BD)
- * 
- * Equivalente a DataLoadAPI.java del Backend.
  */
 @Slf4j
 @RestController
@@ -38,38 +43,26 @@ import java.util.Map;
 public class CargaDatosController {
 
     private final DataLoadService dataLoadService;
+    private final PedidoService pedidoService;
 
-    /**
-     * Cargar pedidos desde archivos _pedidos_{AEROPUERTO}_ hacia la base de datos.
-     *
-     * @param directorioArchivos Opcional: ruta personalizada al directorio de datos
-     * @param horaInicio Opcional: solo cargar pedidos después de esta hora
-     * @param horaFin Opcional: solo cargar pedidos antes de esta hora
-     * @return Estadísticas sobre pedidos cargados
-     *
-     * Ejemplos:
-     *   POST /api/datos/cargar-pedidos
-     *   POST /api/datos/cargar-pedidos?horaInicio=2025-01-02T00:00:00&horaFin=2025-01-02T01:00:00
-     *   POST /api/datos/cargar-pedidos?directorioArchivos=/ruta/personalizada
-     */
     @PostMapping("/cargar-pedidos")
     @Operation(
-        summary = "Cargar pedidos desde archivos",
-        description = "Carga pedidos desde archivos con patrón _pedidos_{AEROPUERTO}_ a la base de datos. " +
-                      "Opcionalmente filtra por ventana de tiempo para escenarios diario/semanal. " +
-                      "\n\nFormato de archivo: id_pedido-aaaammdd-hh-mm-dest-###-IdClien" +
-                      "\n\nEjemplo: 000000001-20250102-01-38-EBCI-006-0007729"
+            summary = "Cargar pedidos desde archivos",
+            description = "Carga pedidos desde archivos con patrón _pedidos_{AEROPUERTO}_ a la base de datos. " +
+                    "Opcionalmente filtra por ventana de tiempo para escenarios diario/semanal. " +
+                    "\n\nFormato de archivo: id_pedido-aaaammdd-hh-mm-dest-###-IdClien" +
+                    "\n\nEjemplo: 000000001-20250102-01-38-EBCI-006-0007729"
     )
     @ApiResponses(value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Pedidos cargados exitosamente",
-            content = @Content(schema = @Schema(implementation = Map.class))
-        ),
-        @ApiResponse(
-            responseCode = "500",
-            description = "Error durante la carga de pedidos"
-        )
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Pedidos cargados exitosamente",
+                    content = @Content(schema = @Schema(implementation = Map.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Error durante la carga de pedidos"
+            )
     })
     public ResponseEntity<Map<String, Object>> cargarPedidos(
             @Parameter(description = "Ruta personalizada al directorio de datos (opcional)", example = "data/pedidos")
@@ -83,15 +76,13 @@ public class CargaDatosController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
             LocalDateTime horaFin) {
 
-        // OPTIMIZACIÓN: Agregar logging específico sin sobrecarga
         long inicioTiempo = System.currentTimeMillis();
-        
+
         try {
             log.info("========================================");
             log.info("API: SOLICITUD DE CARGA DE PEDIDOS RECIBIDA");
             log.info("========================================");
 
-            // Usar directorio predeterminado si no se especifica
             String rutaDirectorio = directorioArchivos != null ? directorioArchivos : obtenerDirectorioPredeterminado();
 
             log.info("Directorio: {}", rutaDirectorio);
@@ -99,41 +90,38 @@ public class CargaDatosController {
                 log.info("Ventana de tiempo: {} a {}", horaInicio, horaFin);
             }
 
-            // Cargar pedidos
             DataLoadService.ResultadoCargaDatos resultado =
-                dataLoadService.cargarPedidosDesdeArchivos(rutaDirectorio, horaInicio, horaFin);
+                    dataLoadService.cargarPedidosDesdeArchivos(rutaDirectorio, horaInicio, horaFin);
 
-            // Construir respuesta
             Map<String, Object> respuesta = new HashMap<>();
             respuesta.put("exito", resultado.getExito());
             respuesta.put("mensaje", resultado.getExito() ?
-                "Pedidos cargados exitosamente" : resultado.getMensajeError());
+                    "Pedidos cargados exitosamente" : resultado.getMensajeError());
             respuesta.put("estadisticas", Map.of(
-                "pedidosCargados", resultado.getPedidosCargados() != null ? resultado.getPedidosCargados() : 0,
-                "pedidosCreados", resultado.getPedidosCreados() != null ? resultado.getPedidosCreados() : 0,
-                "pedidosFiltrados", resultado.getPedidosFiltrados() != null ? resultado.getPedidosFiltrados() : 0,
-                "erroresParseo", resultado.getErroresParseo() != null ? resultado.getErroresParseo() : 0,
-                "erroresArchivos", resultado.getErroresArchivos() != null ? resultado.getErroresArchivos() : 0,
-                "duracionSegundos", resultado.getDuracionSegundos() != null ? resultado.getDuracionSegundos() : 0
+                    "pedidosCargados", resultado.getPedidosCargados() != null ? resultado.getPedidosCargados() : 0,
+                    "pedidosCreados", resultado.getPedidosCreados() != null ? resultado.getPedidosCreados() : 0,
+                    "pedidosFiltrados", resultado.getPedidosFiltrados() != null ? resultado.getPedidosFiltrados() : 0,
+                    "erroresParseo", resultado.getErroresParseo() != null ? resultado.getErroresParseo() : 0,
+                    "erroresArchivos", resultado.getErroresArchivos() != null ? resultado.getErroresArchivos() : 0,
+                    "duracionSegundos", resultado.getDuracionSegundos() != null ? resultado.getDuracionSegundos() : 0
             ));
             respuesta.put("tiempoInicio", resultado.getTiempoInicio());
             respuesta.put("tiempoFin", resultado.getTiempoFin());
 
             if (horaInicio != null && horaFin != null) {
                 respuesta.put("ventanaTiempo", Map.of(
-                    "horaInicio", horaInicio.toString(),
-                    "horaFin", horaFin.toString()
+                        "horaInicio", horaInicio.toString(),
+                        "horaFin", horaFin.toString()
                 ));
             }
-            
-            // PERFORMANCE: Agregar tiempo de ejecución en respuesta
+
             long tiempoTotal = System.currentTimeMillis() - inicioTiempo;
             respuesta.put("tiempoEjecucionMs", tiempoTotal);
             log.info("Carga completada en {} ms", tiempoTotal);
 
             return resultado.getExito() ?
-                ResponseEntity.ok(respuesta) :
-                ResponseEntity.internalServerError().body(respuesta);
+                    ResponseEntity.ok(respuesta) :
+                    ResponseEntity.internalServerError().body(respuesta);
 
         } catch (Exception e) {
             log.error("Error crítico en carga de pedidos", e);
@@ -145,27 +133,122 @@ public class CargaDatosController {
         }
     }
 
-    /**
-     * Obtener estado de los datos en la base de datos.
-     * Muestra cuántos pedidos hay actualmente en la BD.
-     *
-     * Ejemplo: GET /api/datos/estado
-     */
-    @GetMapping("/estado")
+
+    @PostMapping("/insertar-pedidos")
     @Operation(
-        summary = "Obtener estado de datos",
-        description = "Retorna estadísticas sobre los datos actualmente cargados en la base de datos"
+            summary = "Insertar pedidos manualmente",
+            description = "Inserta pedidos enviados en el cuerpo de la petición, sin leer archivos. " +
+                    "Devuelve estadísticas compatibles con /cargar-pedidos."
     )
     @ApiResponses(value = {
-        @ApiResponse(
-            responseCode = "200",
-            description = "Estado obtenido exitosamente",
-            content = @Content(schema = @Schema(implementation = Map.class))
-        ),
-        @ApiResponse(
-            responseCode = "500",
-            description = "Error al obtener estado"
-        )
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Pedidos insertados exitosamente",
+                    content = @Content(schema = @Schema(implementation = Map.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "No se enviaron pedidos"
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Error durante la inserción de pedidos"
+            )
+    })
+    public ResponseEntity<Map<String, Object>> insertarPedidosDesdeApi(
+            @Parameter(description = "Lista de pedidos a insertar", required = true)
+            @RequestBody List<Pedido> pedidos
+    ) {
+
+        log.info("Se llamó al endpoint de insertarPedidosDesdeApi");
+
+        long inicioMillis = System.currentTimeMillis();
+        LocalDateTime tiempoInicio = LocalDateTime.now();
+
+        try {
+            log.info("========================================");
+            log.info("API: SOLICITUD DE INSERCIÓN DIRECTA DE PEDIDOS");
+            log.info("========================================");
+            log.info("Cantidad de pedidos recibidos: {}",
+                    (pedidos != null ? pedidos.size() : 0));
+
+            if (pedidos == null || pedidos.isEmpty()) {
+                Map<String, Object> respuestaVacia = new HashMap<>();
+                respuestaVacia.put("exito", false);
+                respuestaVacia.put("mensaje", "No se recibieron pedidos para insertar");
+                return ResponseEntity.badRequest().body(respuestaVacia);
+            }
+
+            // crear el arreglo de Productos para cada Pedido
+            // se define la cantidad de productos de forma estática (solo para la demostración)
+            // FALTA MEJORAR ESTO
+            int cantProds = 4;
+            for (Pedido ped : pedidos) {
+                ArrayList<Producto> prods = new ArrayList<>();
+                for (int i=0; i<cantProds; i++) {
+                    Producto producto = new Producto();
+                    producto.setNombre("PRODUCT-" + (i + 1)); // Nombre del producto
+                    producto.setPeso(1.0); // Peso por defecto (como en el Backend de ejemplo)
+                    producto.setVolumen(1.0); // Volumen por defecto (como en el Backend de ejemplo)
+                    producto.setEstado(EstadoProducto.EN_ALMACEN);
+                    producto.setPedido(ped);
+                    prods.add(producto);
+                }
+                ped.setProductos(prods);
+            }
+
+            var pedidosCreados = pedidoService.insertarBulk(pedidos);
+
+            LocalDateTime tiempoFin = LocalDateTime.now();
+            long duracionSegundos = ChronoUnit.SECONDS.between(tiempoInicio, tiempoFin);
+            long tiempoTotalMs = System.currentTimeMillis() - inicioMillis;
+
+            int totalCreados = (pedidosCreados != null ? pedidosCreados.size() : 0);
+
+            Map<String, Object> respuesta = new HashMap<>();
+            respuesta.put("exito", true);
+            respuesta.put("mensaje", "Pedidos insertados exitosamente desde API");
+
+            respuesta.put("estadisticas", Map.of(
+                    "pedidosCargados", totalCreados,
+                    "pedidosCreados", totalCreados,
+                    "pedidosFiltrados", 0,
+                    "erroresParseo", 0,
+                    "erroresArchivos", 0,
+                    "duracionSegundos", duracionSegundos
+            ));
+
+            respuesta.put("tiempoInicio", tiempoInicio.toString());
+            respuesta.put("tiempoFin", tiempoFin.toString());
+            respuesta.put("tiempoEjecucionMs", tiempoTotalMs);
+
+            return ResponseEntity.ok(respuesta);
+
+        } catch (Exception e) {
+            log.error("Error al insertar pedidos desde API", e);
+            Map<String, Object> respuestaError = new HashMap<>();
+            respuestaError.put("exito", false);
+            respuestaError.put("mensaje", "Error al insertar pedidos: " + e.getMessage());
+            respuestaError.put("error", e.getClass().getSimpleName());
+            return ResponseEntity.internalServerError().body(respuestaError);
+        }
+    }
+
+    @GetMapping("/estado")
+    @Operation(
+            summary = "Obtener estado de datos",
+            description = "Retorna estadísticas sobre los datos actualmente cargados en la base de datos"
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Estado obtenido exitosamente",
+                    content = @Content(schema = @Schema(implementation = Map.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "Error al obtener estado"
+            )
     })
     public ResponseEntity<Map<String, Object>> obtenerEstado() {
         try {
@@ -177,9 +260,9 @@ public class CargaDatosController {
                 respuesta.put("mensaje", "Estado de datos obtenido exitosamente");
                 respuesta.put("directorioArchivos", obtenerDirectorioPredeterminado());
                 respuesta.put("estadisticas", Map.of(
-                    "totalAeropuertos", estado.getTotalAeropuertos() != null ? estado.getTotalAeropuertos() : 0,
-                    "totalPedidos", estado.getTotalPedidos() != null ? estado.getTotalPedidos() : 0,
-                    "pedidosPendientes", estado.getPedidosPendientes() != null ? estado.getPedidosPendientes() : 0
+                        "totalAeropuertos", estado.getTotalAeropuertos() != null ? estado.getTotalAeropuertos() : 0,
+                        "totalPedidos", estado.getTotalPedidos() != null ? estado.getTotalPedidos() : 0,
+                        "pedidosPendientes", estado.getPedidosPendientes() != null ? estado.getPedidosPendientes() : 0
                 ));
             } else {
                 respuesta.put("mensaje", estado.getMensajeError());
@@ -195,27 +278,20 @@ public class CargaDatosController {
         }
     }
 
-    /**
-     * Obtener ruta del directorio predeterminado de datos.
-     * Usa la ubicación del directorio 'data' en el proyecto.
-     */
     private String obtenerDirectorioPredeterminado() {
-        // Intentar obtener directorio del proyecto
         String directorioProyecto = System.getProperty("user.dir");
         File dataDirRelativo = new File(directorioProyecto, "data/pedidos");
-        
+
         if (dataDirRelativo.exists() && dataDirRelativo.isDirectory()) {
             return dataDirRelativo.getAbsolutePath();
         }
-        
-        // Fallback: directorio data en raíz del proyecto
+
         dataDirRelativo = new File(directorioProyecto, "data");
         if (dataDirRelativo.exists() && dataDirRelativo.isDirectory()) {
             return dataDirRelativo.getAbsolutePath();
         }
-        
-        // Último fallback: usar directorio del proyecto
+
         return directorioProyecto;
     }
-}
 
+}
