@@ -160,6 +160,8 @@ public class CargaDatosController {
             @RequestBody List<Pedido> pedidos
     ) {
 
+        log.info("Se llamó al endpoint de insertarPedidosDesdeApi");
+
         long inicioMillis = System.currentTimeMillis();
         LocalDateTime tiempoInicio = LocalDateTime.now();
 
