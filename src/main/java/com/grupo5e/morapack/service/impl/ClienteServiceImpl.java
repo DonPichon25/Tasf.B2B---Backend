@@ -5,21 +5,22 @@ import com.grupo5e.morapack.core.model.Cliente;
 import com.grupo5e.morapack.core.model.UsuarioId;
 import com.grupo5e.morapack.repository.ClienteRepository;
 import com.grupo5e.morapack.service.ClienteService;
+import jakarta.persistence.EntityManager;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class ClienteServiceImpl implements ClienteService {
 
     private final ClienteRepository clienteRepository;
-
-    public ClienteServiceImpl(ClienteRepository clienteRepository) {
-        this.clienteRepository = clienteRepository;
-    }
+    private final EntityManager entityManager;
 
     @Override
     public List<Cliente> listar() {
@@ -79,6 +80,29 @@ public class ClienteServiceImpl implements ClienteService {
     @Override
     @Transactional
     public List<Cliente> insertarBulk(List<Cliente> clientes) {
-        return clienteRepository.saveAll(clientes).stream().collect(Collectors.toList());
+        //return clienteRepository.saveAll(clientes).stream().collect(Collectors.toList());
+        List<Cliente> result = new ArrayList<>();
+        int batchSize = 1000;
+
+        for (int i = 0; i < clientes.size(); i++) {
+            entityManager.persist(clientes.get(i));
+            result.add(clientes.get(i));
+            //System.out.println("Inserted Cliente with ID: " + clientes.get(i).getUsuarioId().getId());
+            if (i % batchSize == 0) {
+                entityManager.flush();
+                entityManager.clear();
+            }
+        }
+
+        // último flush
+        entityManager.flush();
+        entityManager.clear();
+
+        return result;
+    }
+
+    @Override
+    public List<Cliente> listarPorTipoData(int tipoData) {
+        return clienteRepository.findAllByTipoData(tipoData);
     }
 }

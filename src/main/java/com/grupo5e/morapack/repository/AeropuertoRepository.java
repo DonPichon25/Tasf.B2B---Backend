@@ -17,7 +17,12 @@ public interface AeropuertoRepository extends JpaRepository<Aeropuerto, Integer>
     Optional<Aeropuerto> findByCodigoIATA(String codigoIATA);
     List<Aeropuerto> findByEstado(EstadoAeropuerto estado);
     @Query(
-            value = "SELECT * FROM aeropuertos WHERE tipo_data = :tipoData",
+            value = """
+                SELECT a.* 
+                FROM aeropuertos a
+                JOIN ciudades c ON a.ciudad_id = c.id
+                WHERE a.tipo_data = :tipoData
+            """,
             nativeQuery = true
     )
     List<Aeropuerto> listarPorTipoData(@Param("tipoData") int tipoData);

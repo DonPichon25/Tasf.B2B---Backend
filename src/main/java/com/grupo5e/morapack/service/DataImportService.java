@@ -474,8 +474,8 @@ public class DataImportService {
             log.info("   Aeropuertos disponibles en BD: {}", aeropuertos.size());
             
             // 2. Contar pedidos antes de importar
-            int countAntes = pedidoService.listar().size();
-            log.info("   Pedidos en BD antes de importar: {}", countAntes);
+//            int countAntes = pedidoService.listar().size();
+//            log.info("   Pedidos en BD antes de importar: {}", countAntes);
             
             // 3. Guardar archivo temporal
             tempFile = guardarArchivoTemporal(file);
@@ -549,15 +549,15 @@ public class DataImportService {
                 
                 // 4. Contar pedidos después de importar
                 int countDespues = pedidoService.listar().size();
-                int pedidosImportados = countDespues - countAntes;
+                //int pedidosImportados = countDespues - countAntes;
                 
                 log.info("   Pedidos en BD después de importar: {}", countDespues);
                 
                 result.put("success", true);
                 result.put("message", "Pedidos importados exitosamente (Formato V1)");
-                result.put("count", pedidosImportados);
-                
-                log.info("✅ {} pedidos importados (V1)", pedidosImportados);
+//                result.put("count", pedidosImportados);
+//
+//                log.info("✅ {} pedidos importados (V1)", pedidosImportados);
             }
             
         } catch (Exception e) {

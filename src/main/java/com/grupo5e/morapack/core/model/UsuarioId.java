@@ -22,7 +22,7 @@ public class UsuarioId implements Serializable {
 //    private Long id;       // ID que viene del archivo
 //    private int tipoData;  // 0 = prueba, 1 = real
     @Column(name = "id")
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    //@GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "tipo_data", columnDefinition = "int default 1")

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Servicio para cargar datos desde archivos hacia la base de datos.
@@ -64,8 +65,14 @@ public class DataLoadService {
 
         try {
             // Cargar aeropuertos desde BD (necesarios para validar archivos)
-            ArrayList<Aeropuerto> aeropuertos = new ArrayList<>(aeropuertoService.listar());
-            
+            List<Aeropuerto> aeropuertos = new ArrayList<>();
+            aeropuertos = aeropuertoService.listartipoData(0); // Aeropuertos de tipo DATA
+            if( aeropuertos == null ) {
+                //No hay aeropuertos de tipo data de prueba
+                //cargar de bd normal
+                aeropuertos = aeropuertoService.listartipoData(1);
+            }
+
             if (aeropuertos.isEmpty()) {
                 resultado.exito = false;
                 resultado.mensajeError = "No hay aeropuertos en la base de datos. " +

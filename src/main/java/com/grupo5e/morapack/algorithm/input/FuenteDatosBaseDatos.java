@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Implementación de FuenteDatosInput que lee desde la base de datos PostgreSQL
@@ -60,7 +61,8 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
     @Transactional(readOnly = true)
     public List<Aeropuerto> cargarAeropuertos() {
         try {
-            List<Aeropuerto> aeropuertos = aeropuertoRepository.findAll();
+            //List<Aeropuerto> aeropuertos = aeropuertoRepository.findAll();
+            List<Aeropuerto> aeropuertos = aeropuertoRepository.listarPorTipoData(1);
             
             // ✅ Forzar inicialización de relaciones LAZY para evitar LazyInitializationException
             // La anotación @Transactional mantiene la sesión de Hibernate abierta
@@ -88,8 +90,8 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
     @Transactional(readOnly = true)
     public List<Vuelo> cargarVuelos(List<Aeropuerto> aeropuertos) {
         try {
-            List<Vuelo> vuelos = vueloRepository.findAll();
-            
+            //List<Vuelo> vuelos = vueloRepository.findAll();
+            List<Vuelo> vuelos = vueloRepository.listarPorTipoData(1);
             // ✅ Forzar inicialización de relaciones LAZY
             // La anotación @Transactional mantiene la sesión de Hibernate abierta
             for (Vuelo vuelo : vuelos) {
@@ -207,7 +209,8 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
     public List<Pedido> cargarPedidosPorVentanaDeTiempo(
             List<Aeropuerto> aeropuertos,
             LocalDateTime horaInicio,
-            LocalDateTime horaFin) {
+            LocalDateTime horaFin,
+            int tipoData) {
         try {
             System.out.println("========================================");
             System.out.println("CARGANDO PEDIDOS CON VENTANA DE TIEMPO (OPTIMIZADO)");
@@ -218,8 +221,11 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
             long startTime = System.currentTimeMillis();
             
             // ⚡ OPTIMIZACIÓN 1: Query optimizada - solo pedidos en ventana
-            List<Pedido> pedidos = pedidoRepository.findByFechaPedidoBetween(horaInicio, horaFin);
-            
+            List<Pedido> pedidosTotales = pedidoRepository.findByFechaPedidoBetween(horaInicio, horaFin);
+            List<Pedido> pedidos = pedidosTotales.stream()
+                    .filter(p -> p.getTipoData() == tipoData)
+                    .collect(Collectors.toList());
+
             long queryTime = System.currentTimeMillis();
             System.out.println("⏱️  Query ejecutada en " + (queryTime - startTime) + "ms");
             

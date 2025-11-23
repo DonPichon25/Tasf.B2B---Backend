@@ -100,7 +100,7 @@ public class ALNSSolver {
      * @param maxIteraciones Número máximo de iteraciones ALNS
      */
     public ALNSSolver(int maxIteraciones) {
-        this(maxIteraciones, null, null);
+        this(maxIteraciones, null, null,1);
     }
     
     /**
@@ -111,7 +111,7 @@ public class ALNSSolver {
      * @param horaInicio Hora de inicio de la ventana de simulación (opcional)
      * @param horaFin Hora de fin de la ventana de simulación (opcional)
      */
-    public ALNSSolver(int maxIteraciones, LocalDateTime horaInicio, LocalDateTime horaFin) {
+    public ALNSSolver(int maxIteraciones, LocalDateTime horaInicio, LocalDateTime horaFin,int tipoData) {
         System.out.println("========================================");
         System.out.println("INICIALIZANDO ALNS SOLVER");
         if (horaInicio != null && horaFin != null) {
@@ -135,7 +135,7 @@ public class ALNSSolver {
         // CRÍTICO: Cargar pedidos con filtrado de tiempo si se especifica
         if (horaInicio != null && horaFin != null) {
             this.pedidosOriginales = new ArrayList<>(
-                fuenteDatos.cargarPedidosPorVentanaDeTiempo(this.aeropuertos, horaInicio, horaFin)
+                fuenteDatos.cargarPedidosPorVentanaDeTiempo(this.aeropuertos, horaInicio, horaFin, tipoData)
             );
         } else {
             this.pedidosOriginales = new ArrayList<>(fuenteDatos.cargarPedidos(this.aeropuertos));
@@ -184,7 +184,7 @@ public class ALNSSolver {
         this.ocupacionTemporalAlmacenes = new HashMap<>();
         
         // 6. Inicializar caches y estructuras
-        asignarAeropuertosOrigen();
+        //asignarAeropuertosOrigen();
         inicializarCacheCiudadAeropuerto();
         construirCacheAeropuertos(); // OPTIMIZACIÓN: Cache IATA→Aeropuerto
         inicializarT0();

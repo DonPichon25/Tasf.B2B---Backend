@@ -15,4 +15,5 @@ public interface ClienteService {
     void eliminar(Long id,int tipoData);
     boolean existePorId(Long id,int tipoData);
     List<Cliente> insertarBulk(List<Cliente> clientes);
+    List<Cliente> listarPorTipoData(int tipoData);
 }

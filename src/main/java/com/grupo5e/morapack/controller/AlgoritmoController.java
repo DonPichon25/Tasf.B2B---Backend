@@ -58,7 +58,7 @@ public class AlgoritmoController {
     })
     @PostMapping("/ejecutar")
     public ResponseEntity<ResultadoAlgoritmoDTO> ejecutarAlgoritmo(
-            @RequestBody(required = false) AlnsRequestDTO solicitud) {
+            @RequestBody(required = false) AlnsRequestDTO solicitud,int tipoData) {
         
         LocalDateTime horaInicio = LocalDateTime.now();
         log.info("🚀 Ejecutando algoritmo ALNS (sincrónico) - Inicio: {}", horaInicio);
@@ -99,7 +99,7 @@ public class AlgoritmoController {
             // Usar constructor con soporte de ventanas de tiempo
             log.info("Creando ALNSSolver con {} iteraciones{}", iteraciones,
                 (horaInicioSimulacion != null ? " y ventana de tiempo" : ""));
-            ALNSSolver solver = new ALNSSolver(iteraciones, horaInicioSimulacion, horaFinSimulacion);
+            ALNSSolver solver = new ALNSSolver(iteraciones, horaInicioSimulacion, horaFinSimulacion,tipoData);
             
             // 3. Ejecutar el algoritmo
             log.info("   Iteraciones configuradas: {}", iteraciones);
@@ -445,7 +445,7 @@ public class AlgoritmoController {
         }
     }
     private ResultadoAlgoritmoDTO ejecutarAlgoritmoInterno(AlnsRequestDTO solicitud) {
-        return ejecutarAlgoritmo(solicitud).getBody();
+        return ejecutarAlgoritmo(solicitud,1).getBody();
     }
     private Map<Producto, ArrayList<Vuelo>> reconstruirMapa(List<RutaProductoDTO> rutas) {
 
@@ -657,7 +657,7 @@ public class AlgoritmoController {
             log.info("⚠️ ADVERTENCIA: La ejecución semanal puede tomar 30-90 minutos");
             
             // Ejecutar algoritmo
-            return ejecutarAlgoritmo(solicitud);
+            return ejecutarAlgoritmo(solicitud,0);
             
         } catch (Exception e) {
             log.error("❌ Error ejecutando escenario semanal", e);
