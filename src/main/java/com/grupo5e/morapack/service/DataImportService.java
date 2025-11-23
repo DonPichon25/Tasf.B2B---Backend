@@ -4,10 +4,7 @@ import com.grupo5e.morapack.api.dto.FileValidationResult;
 import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.core.validation.EntityValidator;
 import com.grupo5e.morapack.core.validation.PACKTimeValidator;
-import com.grupo5e.morapack.repository.CancelacionRepository;
-import com.grupo5e.morapack.repository.CiudadRepository;
-import com.grupo5e.morapack.repository.ClienteRepository;
-import com.grupo5e.morapack.repository.ProductoRepository;
+import com.grupo5e.morapack.repository.*;
 import com.grupo5e.morapack.utils.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -48,7 +45,7 @@ public class DataImportService {
     private final com.grupo5e.morapack.repository.AlmacenRepository almacenRepository;
     private final CancelacionService cancelacionService;
     private final com.grupo5e.morapack.service.impl.BatchService batchService;
-
+    private final UsuarioRepository usuarioRepository;
     /**
      * Guarda MultipartFile a archivo temporal
      */
@@ -145,36 +142,36 @@ public class DataImportService {
             }
             
             // 5. Verificar si ya existen aeropuertos y filtrar duplicados
-            log.info("   🔍 Verificando aeropuertos existentes...");
-            List<Aeropuerto> aeropuertosExistentes = aeropuertoService.listar();
-            Set<String> codigosExistentes = aeropuertosExistentes.stream()
-                .map(Aeropuerto::getCodigoIATA)
-                .collect(Collectors.toSet());
-            
-            List<Aeropuerto> aeropuertosNuevos = aeropuertos.stream()
-                .filter(a -> !codigosExistentes.contains(a.getCodigoIATA()))
-                .collect(Collectors.toList());
-            
-            if (aeropuertosNuevos.isEmpty()) {
-                log.warn("   ⚠️ Todos los aeropuertos ya existen en BD. Saltando inserción.");
-                log.info("   ℹ️ Si deseas re-importar, primero limpia la base de datos.");
-                
-                // Retornar resultado exitoso sin insertar duplicados
-                result.put("success", true);
-                result.put("message", "Aeropuertos ya existen en base de datos. No se insertaron duplicados.");
-                result.put("count", aeropuertosExistentes.size());
-                result.put("cities", (int) ciudadesGuardadas.stream().count());
-                
-                return result;
-            }
-            
-            log.info("   ✅ {} aeropuertos nuevos a insertar (de {} totales)", 
-                aeropuertosNuevos.size(), aeropuertos.size());
-            
-            // 6. Extraer y guardar almacenes de aeropuertos nuevos
-            // NOTA: LectorAeropuerto ya creó los almacenes con capacidades correctas
+//            log.info("   🔍 Verificando aeropuertos existentes...");
+//            List<Aeropuerto> aeropuertosExistentes = aeropuertoService.listar();
+//            Set<String> codigosExistentes = aeropuertosExistentes.stream()
+//                .map(Aeropuerto::getCodigoIATA)
+//                .collect(Collectors.toSet());
+//
+//            List<Aeropuerto> aeropuertosNuevos = aeropuertos.stream()
+//                .filter(a -> !codigosExistentes.contains(a.getCodigoIATA()))
+//                .collect(Collectors.toList());
+//
+//            if (aeropuertosNuevos.isEmpty()) {
+//                log.warn("   ⚠️ Todos los aeropuertos ya existen en BD. Saltando inserción.");
+//                log.info("   ℹ️ Si deseas re-importar, primero limpia la base de datos.");
+//
+//                // Retornar resultado exitoso sin insertar duplicados
+//                result.put("success", true);
+//                result.put("message", "Aeropuertos ya existen en base de datos. No se insertaron duplicados.");
+//                result.put("count", aeropuertosExistentes.size());
+//                result.put("cities", (int) ciudadesGuardadas.stream().count());
+//
+//                return result;
+//            }
+//
+//            log.info("   ✅ {} aeropuertos nuevos a insertar (de {} totales)",
+//                aeropuertosNuevos.size(), aeropuertos.size());
+//
+//            // 6. Extraer y guardar almacenes de aeropuertos nuevos
+//            // NOTA: LectorAeropuerto ya creó los almacenes con capacidades correctas
             List<com.grupo5e.morapack.core.model.Almacen> almacenes = new ArrayList<>();
-            for (Aeropuerto aeropuerto : aeropuertosNuevos) {
+            for (Aeropuerto aeropuerto : aeropuertos) {
                 Almacen almacen = aeropuerto.getAlmacen();
                 if (almacen != null) {
                     // Asegurarse de que el almacén no tiene ID (será generado por BD)
@@ -182,7 +179,7 @@ public class DataImportService {
                     almacenes.add(almacen);
                 } else {
                     // Fallback: crear almacén con capacidad por defecto si no existe
-                    log.warn("   ⚠️ Aeropuerto {} no tiene almacén, creando con capacidad por defecto", 
+                    log.warn("   ⚠️ Aeropuerto {} no tiene almacén, creando con capacidad por defecto",
                         aeropuerto.getCodigoIATA());
                     Almacen almacenNuevo = Almacen.builder()
                         .nombre("Almacen " + aeropuerto.getCodigoIATA())
@@ -194,14 +191,14 @@ public class DataImportService {
                     aeropuerto.setAlmacen(almacenNuevo);
                 }
             }
-            
-            // 7. Guardar almacenes en BD (esto les asigna IDs)
+//
+//            // 7. Guardar almacenes en BD (esto les asigna IDs)
             List<com.grupo5e.morapack.core.model.Almacen> almacenesGuardados = almacenRepository.saveAll(almacenes);
             log.info("   ✅ {} almacenes guardados (con capacidades del archivo)", almacenesGuardados.size());
-            
+//
             // 8. Actualizar aeropuertos con referencias a almacenes guardados (con IDs)
-            for (int i = 0; i < aeropuertosNuevos.size(); i++) {
-                Aeropuerto aero = aeropuertosNuevos.get(i);
+            for (int i = 0; i < aeropuertos.size(); i++) {
+                Aeropuerto aero = aeropuertos.get(i);
                 com.grupo5e.morapack.core.model.Almacen alm = almacenesGuardados.get(i);
                 // Establecer relación bidireccional
                 aero.setAlmacen(alm);
@@ -209,9 +206,10 @@ public class DataImportService {
             }
             
             // 9. Guardar aeropuertos con almacenes asociados
-            List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertosNuevos);
-            
-            // 10. Re-guardar almacenes para persistir la relación bidireccional
+            //List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertosNuevos);
+            List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertos);
+
+            //10. Re-guardar almacenes para persistir la relación bidireccional
             almacenRepository.saveAll(almacenesGuardados);
             
             result.put("success", true);
@@ -222,7 +220,7 @@ public class DataImportService {
             
             log.info("✅ {} aeropuertos y {} almacenes importados con IDs: {}", 
                      aeropuertosGuardados.size(),
-                     almacenesGuardados.size(),
+                    almacenesGuardados.size(),
                      aeropuertosGuardados.stream()
                          .limit(3)
                          .map(a -> a.getId() + ":" + a.getCodigoIATA())
@@ -250,12 +248,22 @@ public class DataImportService {
     @Transactional
     public Map<String, Object> importFlights(MultipartFile file) {
         Map<String, Object> result = new HashMap<>();
-        
+
         try {
             log.info("✈️ Iniciando importación de vuelos...");
-            
+
             // 1. Verificar que existan aeropuertos en BD
-            List<Aeropuerto> aeropuertos = aeropuertoService.listar();
+            List<Aeropuerto> aeropuertos;
+            //Si es que hay aeropuertos de tipoData 0 entonces filtrar con esos
+            List<Aeropuerto> aeropuertosArchivo = aeropuertoService.listartipoData(0);
+            if(aeropuertosArchivo.isEmpty()){
+                log.info("   Archivo de aeropuertos no subido, usando todos los aeropuertos en BD");
+                aeropuertos = aeropuertoService.listartipoData(1);
+            }else{
+                log.info("   Usando aeropuertos importados desde archivo de aeropuertosinfo.txt");
+                aeropuertos = aeropuertosArchivo;
+            }
+
             if (aeropuertos.isEmpty()) {
                 result.put("success", false);
                 result.put("message", "Debe importar aeropuertos primero antes de importar vuelos");
@@ -438,13 +446,23 @@ public class DataImportService {
         Map<String, Object> result = new HashMap<>();
         Path tempFile = null;
         Path tempDir = null;
-        
+
         try {
             log.info("📦 Iniciando importación de pedidos desde frontend...");
             log.info("   Archivo: {} ({} MB)", file.getOriginalFilename(), file.getSize() / (1024.0 * 1024.0));
             
             // 1. Verificar que existan aeropuertos en BD
-            List<Aeropuerto> aeropuertos = aeropuertoService.listar();
+            List<Aeropuerto> aeropuertos;
+            //Si es que hay aeropuertos de tipoData 0 entonces filtrar con esos
+            List<Aeropuerto> aeropuertosArchivo = aeropuertoService.listartipoData(0);
+            if(aeropuertosArchivo.isEmpty()){
+                log.info("   Archivo de aeropuertos no subido, usando todos los aeropuertos en BD");
+                aeropuertos = aeropuertoService.listartipoData(1);
+            }else{
+                log.info("   Usando aeropuertos importados desde archivo de aeropuertosinfo.txt");
+                aeropuertos = aeropuertosArchivo;
+            }
+            //Si no hay, entonces usar todos
             if (aeropuertos.isEmpty()) {
                 result.put("success", false);
                 result.put("message", "Debe importar aeropuertos primero antes de importar pedidos");
@@ -588,12 +606,21 @@ public class DataImportService {
         int filesProcessed = 0;
         int filesWithErrors = 0;
         List<String> errors = new ArrayList<>();
-        
+
         try {
             log.info("📦 Iniciando batch import de {} archivos de pedidos", files.length);
-            
-            // Verificar que existan aeropuertos
-            List<Aeropuerto> aeropuertos = aeropuertoService.listar();
+
+            //Verificar que existan aeropuertos en BD
+            List<Aeropuerto> aeropuertos;
+            //Si es que hay aeropuertos de tipoData 0 entonces filtrar con esos
+            List<Aeropuerto> aeropuertosArchivo = aeropuertoService.listartipoData(0);
+            if(aeropuertosArchivo.isEmpty()){
+                log.info("   Archivo de aeropuertos no subido, usando todos los aeropuertos en BD");
+                aeropuertos = aeropuertoService.listartipoData(1);
+            }else{
+                log.info("   Usando aeropuertos importados desde archivo de aeropuertosinfo.txt");
+                aeropuertos = aeropuertosArchivo;
+            }
             if (aeropuertos.isEmpty()) {
                 batchResult.put("success", false);
                 batchResult.put("message", "Debe importar aeropuertos primero antes de importar pedidos");
@@ -747,65 +774,72 @@ public class DataImportService {
      * Orden: Simulaciones → Productos → Pedidos → Vuelos → Aeropuertos → Ciudades
      */
     @Transactional
-    public Map<String, Object> clearAllData() {
+    public Map<String, Object> clearPruebaData() {
         Map<String, Object> result = new HashMap<>();
         int totalDeleted = 0;
         
         try {
-            log.warn("⚠️ Iniciando limpieza COMPLETA de base de datos");
+            log.warn("⚠️ Iniciando limpieza COMPLETA de data de prueba anterior de la base de datos");
             
             // 1. Limpiar simulaciones primero (tienen FK a pedidos y vuelos)
-            long simDeleted = clearSimulationsOnly();
-            totalDeleted += simDeleted;
-            log.info("  - Simulaciones eliminadas: {}", simDeleted);
+//            long simDeleted = clearSimulationsOnly();
+//            totalDeleted += simDeleted;
+//            log.info("  - Simulaciones eliminadas: {}", simDeleted);
             
             // 2. Limpiar productos (tienen FK a pedidos)
-            long prodDeleted = productoRepository.count();
-            productoRepository.deleteAll();
+            long prodDeleted = productoRepository.contarTipoDataCero();
+            productoRepository.eliminarTipoDataCero();
             totalDeleted += prodDeleted;
             log.info("  - Productos eliminados: {}", prodDeleted);
             
             // 3. Limpiar pedidos (tienen FK a aeropuertos/ciudades)
-            long pedDeleted = pedidoService.listar().size();
-            pedidoService.listar().forEach(pedido -> pedidoService.eliminar(pedido.getId()));
+            long pedDeleted = pedidoService.contarPedidosTipoData0();
+            pedidoService.limpiarBD();
             totalDeleted += pedDeleted;
             log.info("  - Pedidos eliminados: {}", pedDeleted);
             
             // 4. Limpiar vuelos (tienen FK a aeropuertos)
-            long vuelosDeleted = vueloService.listar().size();
-            vueloService.listar().forEach(vuelo -> vueloService.eliminar(vuelo.getId()));
+            long vuelosDeleted = vueloService.contarTipoDataCero();
+            vueloService.limpiarBD();
             totalDeleted += vuelosDeleted;
             log.info("  - Vuelos eliminados: {}", vuelosDeleted);
             
             // 5. Limpiar aeropuertos (tienen FK a ciudades)
-            long aeroDeleted = aeropuertoService.listar().size();
-            aeropuertoService.listar().forEach(aero -> aeropuertoService.eliminar(aero.getId()));
+            long aeroDeleted = aeropuertoService.contarTipoDataCero();
+            aeropuertoService.limpiarBD();
             totalDeleted += aeroDeleted;
             log.info("  - Aeropuertos eliminados: {}", aeroDeleted);
             
             // 6. Limpiar ciudades (no tienen FK)
-            long ciudadesDeleted = ciudadRepository.count();
-            ciudadRepository.deleteAll();
+            long ciudadesDeleted = ciudadRepository.contarTipoDataCero();
+            ciudadRepository.eliminarTipoDataCero();
             totalDeleted += ciudadesDeleted;
             log.info("  - Ciudades eliminadas: {}", ciudadesDeleted);
             
             // 7. Limpiar clientes
-            long clientesDeleted = clienteRepository.count();
-            clienteRepository.deleteAll();
+            long clientesDeleted = clienteRepository.contarTipoDataCero();
+            clienteRepository.eliminarTipoDataCero();
             totalDeleted += clientesDeleted;
             log.info("  - Clientes eliminados: {}", clientesDeleted);
-            
+
+            //8. Limpiar usuarios
+            long usuariosDeleted = usuarioRepository.contarTipoDataCero();
+            usuarioRepository.eliminarTipoDataCero();
+            totalDeleted += usuariosDeleted;
+            log.info("  - Usuarios eliminados: {}", usuariosDeleted);
+
             result.put("success", true);
             result.put("message", "Base de datos limpiada completamente");
             result.put("totalDeleted", totalDeleted);
             result.put("breakdown", Map.of(
-                "simulaciones", simDeleted,
+                //"simulaciones", simDeleted,
                 "productos", prodDeleted,
                 "pedidos", pedDeleted,
                 "vuelos", vuelosDeleted,
                 "aeropuertos", aeroDeleted,
                 "ciudades", ciudadesDeleted,
-                "clientes", clientesDeleted
+                "clientes", clientesDeleted,
+                "usuarios", usuariosDeleted
             ));
             
             log.warn("✅ Limpieza COMPLETA finalizada. Total registros eliminados: {}", totalDeleted);

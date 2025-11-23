@@ -76,7 +76,9 @@ public class Pedido {
     private List<PlanViaje> planesViaje;
 
     private int cantidadProductos;
-    
+
+    @Column(nullable = true)
+    private int tipoData;
     // ===================================================================
     // MÉTODOS DE OPTIMIZACIÓN
     // ===================================================================

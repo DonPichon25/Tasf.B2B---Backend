@@ -15,9 +15,8 @@ import com.grupo5e.morapack.core.enums.Rol;
 @Table(name = "usuarios")
 @Inheritance(strategy = InheritanceType.JOINED)  // Herencia en BD
 public class Usuario {
-    @Id
-//    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @EmbeddedId
+    private UsuarioId usuarioId;
 
     // Credenciales
     @Column(nullable = false, unique = true, length = 100)

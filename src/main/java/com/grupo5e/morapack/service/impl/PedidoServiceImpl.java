@@ -5,6 +5,7 @@ import com.grupo5e.morapack.core.enums.EstadoPedido;
 import com.grupo5e.morapack.core.model.Pedido;
 import com.grupo5e.morapack.repository.PedidoRepository;
 import com.grupo5e.morapack.service.PedidoService;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 public class PedidoServiceImpl implements PedidoService {
 
     private final PedidoRepository pedidoRepository;
+    private EntityManager entityManager;
 
     public PedidoServiceImpl(PedidoRepository pedidoRepository) {
         this.pedidoRepository = pedidoRepository;
@@ -87,7 +89,18 @@ public class PedidoServiceImpl implements PedidoService {
     public List<Pedido> insertarBulk(List<Pedido> pedidos) {
         return pedidoRepository.saveAll(pedidos).stream().collect(Collectors.toList());
     }
-    
+
+    @Override
+    @Transactional
+    public void limpiarBD() {
+        pedidoRepository.eliminarTipoDataCero();
+    }
+
+    @Override
+    public int contarPedidosTipoData0() {
+        return pedidoRepository.contarTipoDataCero();
+    }
+
     /**
      * OPTIMIZACIÓN: Buscar múltiples pedidos por IDs en una sola query.
      * Usa findAllById() de JpaRepository que genera un query eficiente con IN clause.

@@ -26,4 +26,6 @@ public class Ciudad {
     @Enumerated(EnumType.STRING)
     private Continente continente;
 
+    @Column(nullable = true)
+    private int tipoData;
 }

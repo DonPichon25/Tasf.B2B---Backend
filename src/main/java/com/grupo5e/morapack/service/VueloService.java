@@ -19,6 +19,8 @@ public interface VueloService {
     void eliminar(Integer id);
     boolean existePorId(Integer id);
     List<Vuelo> insertarBulk(List<Vuelo> vuelos);
+    void limpiarBD();
+    int contarTipoDataCero();
     
     /**
      * Valida si un vuelo puede ser cancelado (no ha despegado aún).

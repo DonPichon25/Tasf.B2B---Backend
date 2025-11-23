@@ -162,7 +162,7 @@ public class LectorPedidos {
     private Cliente obtenerOCrearCliente(Long idCliente, Ciudad ciudadRecojo) {
         // Intentar buscar el cliente existente en BD
         try {
-            Cliente clienteExistente = clienteService.buscarPorId(idCliente);
+            Cliente clienteExistente = clienteService.buscarPorId(idCliente,0);
             if (clienteExistente != null) {
                 return clienteExistente;
             }
@@ -172,7 +172,10 @@ public class LectorPedidos {
         
         // Si no existe, crear uno nuevo y persistirlo
         Cliente nuevoCliente = new Cliente();
-        nuevoCliente.setId(idCliente);
+        UsuarioId usuarioId = new UsuarioId();
+        usuarioId.setId(idCliente);
+        usuarioId.setTipoData(0);
+        nuevoCliente.setUsuarioId(usuarioId);
         nuevoCliente.setNombres("Cliente " + idCliente);
         nuevoCliente.setCorreo("cliente" + idCliente + "@ejemplo.com");
         nuevoCliente.setCiudadRecojo(ciudadRecojo);
@@ -185,7 +188,7 @@ public class LectorPedidos {
         Long clienteId = clienteService.insertar(nuevoCliente);
         
         // Retornar el cliente recién persistido
-        return clienteService.buscarPorId(clienteId);
+        return clienteService.buscarPorId(clienteId,0);
     }
 
     private LocalDateTime calcularFechaPedido(int hora, int minuto) {

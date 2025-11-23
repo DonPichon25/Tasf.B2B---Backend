@@ -43,7 +43,7 @@ public class LectorPedidosV2 {
     private final BatchService batchService;
 
     // Caché de clientes para evitar búsquedas repetidas
-    private final Map<String, Cliente> cacheClientes = new HashMap<>();
+    private final Map<UsuarioId, Cliente> cacheClientes = new HashMap<>();
     
     // Lista de clientes nuevos pendientes de guardar en batch
     private final List<Cliente> clientesNuevosPendientes = new ArrayList<>();
@@ -301,6 +301,7 @@ public class LectorPedidosV2 {
         ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido);
         pedido.setProductos(productos);
 
+        pedido.setTipoData(0);
         return pedido;
     }
 
@@ -321,7 +322,7 @@ public class LectorPedidosV2 {
             // y tienen el estado correcto de la BD
             for (Cliente clientePersistido : clientesGuardados) {
                 // Reemplazar en caché la instancia transient con la instancia persistida
-                cacheClientes.put(String.valueOf(clientePersistido.getId()), clientePersistido);
+                cacheClientes.put(clientePersistido.getUsuarioId(), clientePersistido);
             }
             
             System.out.println("  ✅ " + clientesGuardados.size() + " clientes guardados y caché actualizado");
@@ -344,11 +345,14 @@ public class LectorPedidosV2 {
         }
 
         // Intentar buscar en BD
-        Long idCliente = Long.parseLong(idClienteStr);
+        //Como nos dan los IDs dentro del txt hay que validar con las dos llaves primarias
+        //el ID del cliente sería 0027081 combinado con el tipo_data para que no se repitan
+
+        Long idCliente = Long.parseLong(idClienteStr); // Ajuste de ID según convención
         try {
-            Cliente clienteExistente = clienteService.buscarPorId(idCliente);
+            Cliente clienteExistente = clienteService.buscarPorId(idCliente,0);
             if (clienteExistente != null) {
-                cacheClientes.put(idClienteStr, clienteExistente);
+                cacheClientes.put(new UsuarioId(idCliente,0), clienteExistente);
                 return clienteExistente;
             }
         } catch (Exception e) {
@@ -357,7 +361,10 @@ public class LectorPedidosV2 {
 
         // Crear nuevo cliente (sin persistir aún)
         Cliente nuevoCliente = new Cliente();
-        nuevoCliente.setId(idCliente);
+        UsuarioId usuarioId = new UsuarioId();
+        usuarioId.setId(idCliente);
+        usuarioId.setTipoData(0);
+        nuevoCliente.setUsuarioId(usuarioId);
         nuevoCliente.setNombres("Cliente " + idCliente);
         nuevoCliente.setCorreo("cliente" + idCliente + "@morapack.com");
         nuevoCliente.setCiudadRecojo(ciudadRecojo);
@@ -370,7 +377,7 @@ public class LectorPedidosV2 {
         clientesNuevosPendientes.add(nuevoCliente);
         
         // Guardar en caché (aunque aún no tenga ID de BD, está ok para referencias)
-        cacheClientes.put(idClienteStr, nuevoCliente);
+        cacheClientes.put(usuarioId, nuevoCliente);
         
         return nuevoCliente;
     }
@@ -384,6 +391,7 @@ public class LectorPedidosV2 {
             producto.setVolumen(1.0);  // Volumen por defecto
             producto.setEstado(EstadoProducto.EN_ALMACEN);
             producto.setPedido(pedido);
+            producto.setTipoData(0);
             productos.add(producto);
         }
         return productos;
@@ -413,10 +421,12 @@ public class LectorPedidosV2 {
             // En caso de que algún pedido tenga referencia a una instancia transient del caché antiguo,
             // actualizar con la instancia persistida del caché actualizado
             for (Pedido pedido : pedidos) {
-                if (pedido.getCliente() != null && pedido.getCliente().getId() != null) {
-                    String clienteId = String.valueOf(pedido.getCliente().getId());
+                if (pedido.getCliente() != null && pedido.getCliente().getUsuarioId() != null) {
+                    UsuarioId usuarioId = new UsuarioId();
+                    usuarioId = pedido.getCliente().getUsuarioId();
+                    //String clienteId = String.valueOf(pedido.getCliente().getId());
                     // Obtener la instancia persistida del caché (si existe)
-                    Cliente clientePersistido = cacheClientes.get(clienteId);
+                    Cliente clientePersistido = cacheClientes.get(usuarioId);
                     if (clientePersistido != null) {
                         pedido.setCliente(clientePersistido);
                     }

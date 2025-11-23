@@ -58,4 +58,7 @@ public class Producto {
      */
     @Column(name = "fecha_hora_llegada")
     private LocalDateTime fechaHoraLlegada;
+
+    @Column(nullable = true)
+    private int tipoData;
 }

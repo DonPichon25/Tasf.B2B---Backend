@@ -3,8 +3,10 @@ package com.grupo5e.morapack.repository;
 import com.grupo5e.morapack.core.enums.EstadoProducto;
 import com.grupo5e.morapack.core.model.Producto;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -37,4 +39,12 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     @Query("SELECT p FROM Producto p WHERE p.instanciaVueloAsignada IS NOT NULL " +
            "AND p.estado IN :estados")
     List<Producto> findByInstanciaVueloAsignadaNotNullAndEstadoIn(@Param("estados") List<EstadoProducto> estados);
+
+    @Modifying
+    @Transactional
+    @Query(value = "DELETE FROM productos WHERE tipo_data = 0", nativeQuery = true)
+    void eliminarTipoDataCero();
+
+    @Query(value = "select count(id) from productos where tipo_data = 0",nativeQuery = true)
+    int contarTipoDataCero();
 }

@@ -339,17 +339,17 @@ public class DataImportController {
      * ADVERTENCIA: Elimina TODOS los datos en orden correcto
      */
     @Operation(
-        summary = "Limpiar toda la base de datos",
-        description = "ADVERTENCIA: Elimina TODOS los datos de la BD (simulaciones, asignaciones, pedidos, productos, vuelos, aeropuertos, ciudades)"
+        summary = "Limpiar todos los datos de prueba de toda la base de datos",
+        description = "Elimina TODOS los datos de prueba de la BD (simulaciones, asignaciones, pedidos, productos, vuelos, aeropuertos, ciudades)"
     )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Base de datos limpiada exitosamente"),
+        @ApiResponse(responseCode = "200", description = "Base de datos de prueba limpiada exitosamente"),
         @ApiResponse(responseCode = "500", description = "Error al limpiar base de datos")
     })
-    @DeleteMapping("/clear-all")
-    public ResponseEntity<Map<String, Object>> clearAllData() {
-        log.warn("🗑️ LIMPIEZA COMPLETA de base de datos solicitada");
-        Map<String, Object> result = dataImportService.clearAllData();
+    @DeleteMapping("/clear-DataPrueba")
+    public ResponseEntity<Map<String, Object>> limpiarDataPrueba() {
+        log.warn("🗑️ LIMPIEZA COMPLETA de data de prueba de la base de datos solicitada");
+        Map<String, Object> result = dataImportService.clearPruebaData();
         
         boolean success = (boolean) result.get("success");
         HttpStatus status = success ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR;

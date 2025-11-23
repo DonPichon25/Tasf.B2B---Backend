@@ -4,6 +4,8 @@ import com.grupo5e.morapack.api.dto.BulkResponseDTO;
 import com.grupo5e.morapack.api.dto.ErrorResponseDTO;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.core.model.Cliente;
+import com.grupo5e.morapack.core.model.Usuario;
+import com.grupo5e.morapack.core.model.UsuarioId;
 import com.grupo5e.morapack.service.ClienteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -51,7 +53,7 @@ public class ClienteController {
     public ResponseEntity<Cliente> obtenerPorId(
             @Parameter(description = "ID del cliente", required = true)
             @PathVariable Long id) {
-        Cliente cliente = clienteService.buscarPorId(id);
+        Cliente cliente = clienteService.buscarPorId(id,1);
         if (cliente == null) {
             throw new ResourceNotFoundException("Cliente", "id", id);
         }
@@ -107,7 +109,7 @@ public class ClienteController {
             @Parameter(description = "ID del cliente", required = true)
             @PathVariable Long id,
             @Valid @RequestBody Cliente cliente) {
-        Cliente actualizado = clienteService.actualizar(id, cliente);
+        Cliente actualizado = clienteService.actualizar(id,1, cliente);
         return ResponseEntity.ok(actualizado);
     }
 
@@ -120,7 +122,7 @@ public class ClienteController {
     public ResponseEntity<Void> eliminar(
             @Parameter(description = "ID del cliente", required = true)
             @PathVariable Long id) {
-        clienteService.eliminar(id);
+        clienteService.eliminar(id,1);
         return ResponseEntity.noContent().build();
     }
 
@@ -132,13 +134,13 @@ public class ClienteController {
     @PostMapping("/bulk")
     public ResponseEntity<BulkResponseDTO<Long>> crearBulk(@Valid @RequestBody List<Cliente> clientes) {
         List<Cliente> creados = clienteService.insertarBulk(clientes);
-        List<Long> ids = creados.stream().map(Cliente::getId).collect(Collectors.toList());
+        List<UsuarioId> ids = creados.stream().map(Cliente::getUsuarioId).collect(Collectors.toList());
         
         BulkResponseDTO<Long> response = BulkResponseDTO.<Long>builder()
                 .totalProcesados(clientes.size())
                 .exitosos(ids.size())
                 .fallidos(0)
-                .idsExitosos(ids)
+                .idsExitosos(ids.stream().map(UsuarioId::getId).collect(Collectors.toList()))
                 .mensaje("Clientes creados exitosamente")
                 .build();
         

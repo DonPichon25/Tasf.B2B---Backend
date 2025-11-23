@@ -16,4 +16,7 @@ public interface AeropuertoService {
     void eliminar(Integer id);
     boolean existePorId(Integer id);
     List<Aeropuerto> insertarBulk(List<Aeropuerto> aeropuertos);
+    List<Aeropuerto> listartipoData(int tipoData);
+    void limpiarBD();
+    int contarTipoDataCero();
 }

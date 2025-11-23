@@ -3,6 +3,9 @@ package com.grupo5e.morapack.api.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
 /**
@@ -53,5 +56,12 @@ public class RutaProductoDTO {
     
     @Schema(description = "Estado del producto", example = "EN_TRANSITO")
     private String estado;
+
+    @Schema(description = "Fecha y hora de salida del primer vuelo del producto")
+    private LocalDateTime horaSalida;
+
+    @Schema(description = "Fecha y hora de llegada del primer vuelo del producto")
+    private LocalDateTime horaLlegada;
+
 }
 

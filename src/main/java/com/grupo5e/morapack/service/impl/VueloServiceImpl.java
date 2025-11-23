@@ -99,7 +99,17 @@ public class VueloServiceImpl implements VueloService {
     public List<Vuelo> insertarBulk(List<Vuelo> vuelos) {
         return vueloRepository.saveAll(vuelos).stream().collect(Collectors.toList());
     }
-    
+
+    @Override
+    public void limpiarBD() {
+        vueloRepository.eliminarTipoDataCero();
+    }
+
+    @Override
+    public int contarTipoDataCero() {
+        return vueloRepository.contarTipoDataCero();
+    }
+
     /**
      * Valida si un vuelo puede ser cancelado (no ha despegado aún).
      * 

@@ -71,4 +71,10 @@ public class CiudadServiceImpl implements CiudadService {
     public List<Ciudad> insertarBulk(List<Ciudad> ciudades) {
         return ciudadRepository.saveAll(ciudades).stream().collect(Collectors.toList());
     }
+
+    @Override
+    @Transactional
+    public void limpiarBD() {
+        ciudadRepository.eliminarTipoDataCero();
+    }
 }

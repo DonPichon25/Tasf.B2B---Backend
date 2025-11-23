@@ -14,4 +14,6 @@ public interface CiudadService {
     void eliminar(Integer id);
     boolean existePorId(Integer id);
     List<Ciudad> insertarBulk(List<Ciudad> ciudades);
+    void limpiarBD();
+
 }

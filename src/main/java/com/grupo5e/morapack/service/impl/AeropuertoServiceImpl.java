@@ -5,6 +5,9 @@ import com.grupo5e.morapack.core.enums.EstadoAeropuerto;
 import com.grupo5e.morapack.core.model.Aeropuerto;
 import com.grupo5e.morapack.repository.AeropuertoRepository;
 import com.grupo5e.morapack.service.AeropuertoService;
+import jakarta.persistence.EntityManager;
+import org.hibernate.annotations.processing.SQL;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +19,8 @@ import java.util.stream.Collectors;
 public class AeropuertoServiceImpl implements AeropuertoService {
 
     private final AeropuertoRepository aeropuertoRepository;
+    @Autowired
+    private EntityManager entityManager;
 
     public AeropuertoServiceImpl(AeropuertoRepository aeropuertoRepository) {
         this.aeropuertoRepository = aeropuertoRepository;
@@ -139,4 +144,22 @@ public class AeropuertoServiceImpl implements AeropuertoService {
     public List<Aeropuerto> insertarBulk(List<Aeropuerto> aeropuertos) {
         return aeropuertoRepository.saveAll(aeropuertos).stream().collect(Collectors.toList());
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Aeropuerto> listartipoData(int tipoData) {
+        return aeropuertoRepository.listarPorTipoData(tipoData);
+    }
+
+    @Override
+    @Transactional
+    public void limpiarBD() {
+        aeropuertoRepository.eliminarTipoDataCero();
+    }
+
+    @Override
+    public int contarTipoDataCero() {
+        return aeropuertoRepository.contarTipoDataCero();
+    }
+
 }

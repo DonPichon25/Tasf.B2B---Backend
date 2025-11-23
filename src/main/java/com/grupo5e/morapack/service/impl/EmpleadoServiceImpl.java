@@ -3,6 +3,7 @@ package com.grupo5e.morapack.service.impl;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.core.enums.Rol;
 import com.grupo5e.morapack.core.model.Empleado;
+import com.grupo5e.morapack.core.model.UsuarioId;
 import com.grupo5e.morapack.repository.EmpleadoRepository;
 import com.grupo5e.morapack.service.EmpleadoService;
 import org.springframework.stereotype.Service;
@@ -28,23 +29,23 @@ public class EmpleadoServiceImpl implements EmpleadoService {
 
     @Override
     @Transactional
-    public Long insertar(Empleado empleado) {
-        return empleadoRepository.save(empleado).getId();
+    public UsuarioId insertar(Empleado empleado) {
+        return empleadoRepository.save(empleado).getUsuarioId();
     }
 
     @Override
     @Transactional
-    public Empleado actualizar(Long id, Empleado empleado) {
+    public Empleado actualizar(UsuarioId id, Empleado empleado) {
         Empleado existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Empleado", "id", id);
         }
-        empleado.setId(id);
+        empleado.setUsuarioId(id);
         return empleadoRepository.save(empleado);
     }
 
     @Override
-    public Empleado buscarPorId(Long id) {
+    public Empleado buscarPorId(UsuarioId id) {
         return empleadoRepository.findById(id).orElse(null);
     }
 
@@ -60,7 +61,7 @@ public class EmpleadoServiceImpl implements EmpleadoService {
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(UsuarioId id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Empleado", "id", id);
         }
@@ -68,7 +69,7 @@ public class EmpleadoServiceImpl implements EmpleadoService {
     }
 
     @Override
-    public boolean existePorId(Long id) {
+    public boolean existePorId(UsuarioId id) {
         return empleadoRepository.existsById(id);
     }
 

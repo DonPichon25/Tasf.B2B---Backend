@@ -3,10 +3,7 @@ package com.grupo5e.morapack.service;
 import com.grupo5e.morapack.api.dto.FileValidationResult;
 import com.grupo5e.morapack.core.enums.Continente;
 import com.grupo5e.morapack.core.enums.EstadoAeropuerto;
-import com.grupo5e.morapack.core.model.Aeropuerto;
-import com.grupo5e.morapack.core.model.Ciudad;
-import com.grupo5e.morapack.core.model.Pedido;
-import com.grupo5e.morapack.core.model.Vuelo;
+import com.grupo5e.morapack.core.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -81,7 +78,7 @@ public class FileParsingService {
                 aeropuertos = aeropuertosFromFile;
                 result.addWarning("Se usarán los aeropuertos subidos previamente");
             } else {
-                aeropuertos = aeropuertoService.listar();
+                aeropuertos = aeropuertoService.listartipoData(1);
                 result.addWarning("Se usarán los aeropuertos de la base de datos");
             }
             
@@ -122,7 +119,7 @@ public class FileParsingService {
                 aeropuertos = aeropuertosFromFile;
                 result.addWarning("Se usarán los aeropuertos subidos previamente");
             } else {
-                aeropuertos = aeropuertoService.listar();
+                aeropuertos = aeropuertoService.listartipoData(1);
                 result.addWarning("Se usarán los aeropuertos de la base de datos");
             }
             
@@ -228,6 +225,7 @@ public class FileParsingService {
                             ciudad = new Ciudad();
                             ciudad.setNombre(nombreCiudad);
                             ciudad.setContinente(continenteActual);
+                            ciudad.setTipoData(0);
                             mapaCiudades.put(claveCiudad, ciudad);
                         }
                         
@@ -241,7 +239,8 @@ public class FileParsingService {
                         aeropuerto.setCapacidadMaxima(capacidadMaxima);
                         aeropuerto.setCiudad(ciudad);
                         aeropuerto.setEstado(EstadoAeropuerto.DISPONIBLE);
-                        
+                        aeropuerto.setTipoData(0);
+
                         aeropuertos.add(aeropuerto);
                         
                     } catch (Exception e) {
@@ -311,7 +310,7 @@ public class FileParsingService {
                         vuelo.setCosto(100.0); // Costo por defecto
                         vuelo.setHoraSalida(horaSalidaParsed);
                         vuelo.setHoraLlegada(horaLlegadaParsed);
-                        
+                        vuelo.setTipoData(0);
                         vuelos.add(vuelo);
                         
                     } catch (Exception e) {
@@ -400,11 +399,14 @@ public class FileParsingService {
 
                         // Crear cliente
                         com.grupo5e.morapack.core.model.Cliente cliente = new com.grupo5e.morapack.core.model.Cliente();
-                        cliente.setId(idCliente);
+                        UsuarioId usuarioId = new UsuarioId();
+                        usuarioId.setId(idCliente);
+                        usuarioId.setTipoData(0);
+                        cliente.setUsuarioId(usuarioId);
                         cliente.setNombres("Cliente " + idCliente);
                         cliente.setCorreo("cliente" + idCliente + "@morapack.com");
                         cliente.setCiudadRecojo(aeropuertoDestino.getCiudad());
-
+                        cliente.setTipoData(0);
                         // Origen: almacén aleatorio en el mismo continente si es posible
                         Aeropuerto aeropuertoOrigen = obtenerAeropuertoAlmacenAleatorio(
                                 aeropuertoDestino.getCiudad().getContinente(),
@@ -426,7 +428,7 @@ public class FileParsingService {
                         pedido.setFechaLimiteEntrega(plazoEntrega);
                         pedido.setEstado(com.grupo5e.morapack.core.enums.EstadoPedido.PENDIENTE);
                         pedido.setAeropuertoOrigenCodigo(aeropuertoOrigen.getCodigoIATA());
-
+                        pedido.setTipoData(0);
                         // Prioridad calculada
                         double prioridad = calcularPrioridad(fechaPedido, plazoEntrega);
                         pedido.setPrioridad(prioridad);
@@ -486,7 +488,10 @@ public class FileParsingService {
                                        Map<String, Aeropuerto> mapaAeropuertos) {
         // Crear cliente
         com.grupo5e.morapack.core.model.Cliente cliente = new com.grupo5e.morapack.core.model.Cliente();
-        cliente.setId(idCliente);
+        UsuarioId usuarioId = new UsuarioId();
+        usuarioId.setId(idCliente);
+        usuarioId.setTipoData(0);
+        cliente.setUsuarioId(usuarioId);
         cliente.setNombres("Cliente " + idCliente);
         cliente.setCorreo("cliente" + idCliente + "@ejemplo.com");
         cliente.setCiudadRecojo(aeropuertoDestino.getCiudad());
@@ -573,6 +578,7 @@ public class FileParsingService {
             com.grupo5e.morapack.core.model.Producto producto = new com.grupo5e.morapack.core.model.Producto();
             producto.setPedido(pedido);
             producto.setEstado(com.grupo5e.morapack.core.enums.EstadoProducto.EN_ALMACEN);
+            producto.setTipoData(0);
             productos.add(producto);
         }
         
