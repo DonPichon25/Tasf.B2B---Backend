@@ -406,7 +406,7 @@ public class FileParsingService {
                         cliente.setNombres("Cliente " + idCliente);
                         cliente.setCorreo("cliente" + idCliente + "@morapack.com");
                         cliente.setCiudadRecojo(aeropuertoDestino.getCiudad());
-                        cliente.setTipoData(0);
+                        cliente.getUsuarioId().setTipoData(0);
                         // Origen: almacén aleatorio en el mismo continente si es posible
                         Aeropuerto aeropuertoOrigen = obtenerAeropuertoAlmacenAleatorio(
                                 aeropuertoDestino.getCiudad().getContinente(),

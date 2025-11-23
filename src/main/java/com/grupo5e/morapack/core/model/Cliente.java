@@ -31,8 +31,8 @@ public class Cliente extends Usuario {
     @ManyToOne
     private Ciudad ciudadRecojo;
 
-    @Column(nullable = true)
-    private int tipoData;
+//    @Column(nullable = true)
+//    private int tipoData;
     
 //    public Cliente(String id, String nombre, String email, String codigoIATAPreferido) {
 //        this.id = id;

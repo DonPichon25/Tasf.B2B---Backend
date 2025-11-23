@@ -17,7 +17,12 @@ import com.grupo5e.morapack.core.enums.Rol;
 public class Usuario {
     @EmbeddedId
     private UsuarioId usuarioId;
+    // Exponer id y tipoData como columnas individuales para FK
+    @Column(name = "id", insertable = false, updatable = false)
+    private Long id;
 
+    @Column(name = "tipo_data", insertable = false, updatable = false)
+    private Integer tipoData;
     // Credenciales
     @Column(nullable = false, unique = true, length = 100)
     private String usernameOrEmail; // Para clientes puede ser correo, para empleados un username
