@@ -336,114 +336,174 @@ public class AlgoritmoController {
     public ResponseEntity<ResultadoAlgoritmoDTO> ejecutarEscenarioDiario(
             @RequestBody(required = false) AlnsRequestDTO solicitud) {
 
-        LocalDateTime horaInicioBackend = LocalDateTime.now();
-        log.info("🚀 Ejecutando algoritmo ALNS - ESCENARIO DIARIO");
+        LocalDateTime horaInicio = LocalDateTime.now();
+        log.info("🚀 Ejecutando algoritmo ALNS - ESCENARIO DIARIO - Inicio: {}", horaInicio);
 
         try {
+            // Validar solicitud
             if (solicitud == null) {
-                solicitud = new AlnsRequestDTO();
-                solicitud.setUsarBaseDatos(true);
+                solicitud = AlnsRequestDTO.builder()
+                        .usarBaseDatos(true)
+                        .build();
             }
 
             if (solicitud.getHoraInicioSimulacion() == null) {
-                return ResponseEntity.badRequest().body(
-                        ResultadoAlgoritmoDTO.builder()
-                                .exitoso(false)
-                                .mensaje("horaInicioSimulacion es requerida")
-                                .horaInicio(horaInicioBackend)
-                                .horaFin(LocalDateTime.now())
-                                .build()
-                );
+                ResultadoAlgoritmoDTO resultadoError = ResultadoAlgoritmoDTO.builder()
+                        .exitoso(false)
+                        .mensaje("Error: horaInicioSimulacion es requerida para escenario diario")
+                        .horaInicio(horaInicio)
+                        .horaFin(LocalDateTime.now())
+                        .build();
+                return ResponseEntity.badRequest().body(resultadoError);
             }
 
-            // ==============================
-            // 1. Calcular la horaFin si no viene
-            // ==============================
+            // Calcular ventana de tiempo (por defecto 30 minutos si no se especifica)
             if (solicitud.getHoraFinSimulacion() == null) {
-
-                if (solicitud.getDuracionSimulacionHoras() == null &&
-                        solicitud.getDuracionSimulacionDias() == null) {
-
-                    solicitud.setDuracionSimulacionHoras(1.0); // 30 minutos por defecto
+                if (solicitud.getDuracionSimulacionHoras() == null && solicitud.getDuracionSimulacionDias() == null) {
+                    solicitud.setDuracionSimulacionHoras(0.5); // 30 minutos por defecto
                 }
 
                 LocalDateTime horaFin;
-
                 if (solicitud.getDuracionSimulacionHoras() != null) {
                     long minutos = (long) (solicitud.getDuracionSimulacionHoras() * 60);
                     horaFin = solicitud.getHoraInicioSimulacion().plusMinutes(minutos);
-
                 } else {
-                    horaFin = solicitud.getHoraInicioSimulacion()
-                            .plusDays(solicitud.getDuracionSimulacionDias());
+                    horaFin = solicitud.getHoraInicioSimulacion().plusDays(solicitud.getDuracionSimulacionDias());
                 }
-
                 solicitud.setHoraFinSimulacion(horaFin);
             }
 
-            LocalDateTime windowStart = solicitud.getHoraInicioSimulacion();
-            LocalDateTime windowEnd = solicitud.getHoraFinSimulacion();
+            log.info("Ventana de tiempo: {} a {}",
+                    solicitud.getHoraInicioSimulacion(), solicitud.getHoraFinSimulacion());
 
-            log.info("Ventana temporal: {} -> {}", windowStart, windowEnd);
+            // Ejecutar algoritmo
+            return ejecutarAlgoritmo(solicitud,1);
 
-            // ==============================
-            // 2. Ejecutar ALNS COMPLETO
-            // ==============================
-            ResultadoAlgoritmoDTO fullResult = ejecutarAlgoritmoInterno(solicitud);
+        } catch (Exception e) {
+            log.error("❌ Error ejecutando escenario diario", e);
 
-            if (!fullResult.getExitoso()) {
-                return ResponseEntity.ok(fullResult);
-            }
+            ResultadoAlgoritmoDTO resultadoError = ResultadoAlgoritmoDTO.builder()
+                    .exitoso(false)
+                    .mensaje("Error durante la ejecución del escenario diario: " + e.getMessage())
+                    .horaInicio(horaInicio)
+                    .horaFin(LocalDateTime.now())
+                    .build();
 
-            // ==============================
-            // 3. Filtrar SOLO productos cuya horaSalida reconstruida cae dentro de la ventana
-            // ==============================
-            List<RutaProductoDTO> rutasVentana = fullResult.getRutasProductos().stream()
-                    .filter(r -> {
-                        LocalDateTime salida = r.getHoraSalida();
-                        return salida != null &&
-                                !salida.isBefore(windowStart) &&
-                                !salida.isAfter(windowEnd);
-                    })
-                    .toList();
-
-            log.info("Productos en ventana: {}", rutasVentana.size());
-
-            // ==============================
-            // 4. Reconstruir mapa {Producto → Vuelos} para el conversor
-            // ==============================
-            Map<Producto, ArrayList<Vuelo>> mapaVentana = reconstruirMapa(rutasVentana);
-
-            // ==============================
-            // 5. Convertir solo la ventana al formato DTO completo para el frontend
-            // ==============================
-            ResultadoAlgoritmoDTO resultadoVentana =
-                    convertirSolucionAResultadoConSalida(
-                            mapaVentana,
-                            windowStart,
-                            windowEnd,
-                            0
-                    );
-
-            resultadoVentana.setMensaje(
-                    "Ventana procesada: " + windowStart + " → " + windowEnd
-            );
-
-            return ResponseEntity.ok(resultadoVentana);
-
-        } catch (RuntimeException e) {
-            log.error("❌ Error en /diario", e);
-
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ResultadoAlgoritmoDTO.builder()
-                        .exitoso(false)
-                        .mensaje("Error: " + e.getMessage())
-                        .horaInicio(horaInicioBackend)
-                        .horaFin(LocalDateTime.now())
-                        .build()
-                );
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resultadoError);
         }
     }
+//    public ResponseEntity<ResultadoAlgoritmoDTO> ejecutarEscenarioDiario(
+//            @RequestBody(required = false) AlnsRequestDTO solicitud) {
+//
+//        LocalDateTime horaInicioBackend = LocalDateTime.now();
+//        log.info("🚀 Ejecutando algoritmo ALNS - ESCENARIO DIARIO");
+//
+//        try {
+//            if (solicitud == null) {
+//                solicitud = new AlnsRequestDTO();
+//                solicitud.setUsarBaseDatos(true);
+//            }
+//
+//            if (solicitud.getHoraInicioSimulacion() == null) {
+//                return ResponseEntity.badRequest().body(
+//                        ResultadoAlgoritmoDTO.builder()
+//                                .exitoso(false)
+//                                .mensaje("horaInicioSimulacion es requerida")
+//                                .horaInicio(horaInicioBackend)
+//                                .horaFin(LocalDateTime.now())
+//                                .build()
+//                );
+//            }
+//
+//            // ==============================
+//            // 1. Calcular la horaFin si no viene
+//            // ==============================
+//            if (solicitud.getHoraFinSimulacion() == null) {
+//
+//                if (solicitud.getDuracionSimulacionHoras() == null &&
+//                        solicitud.getDuracionSimulacionDias() == null) {
+//
+//                    solicitud.setDuracionSimulacionHoras(1.0); // 30 minutos por defecto
+//                }
+//
+//                LocalDateTime horaFin;
+//
+//                if (solicitud.getDuracionSimulacionHoras() != null) {
+//                    long minutos = (long) (solicitud.getDuracionSimulacionHoras() * 60);
+//                    horaFin = solicitud.getHoraInicioSimulacion().plusMinutes(minutos);
+//
+//                } else {
+//                    horaFin = solicitud.getHoraInicioSimulacion()
+//                            .plusDays(solicitud.getDuracionSimulacionDias());
+//                }
+//
+//                solicitud.setHoraFinSimulacion(horaFin);
+//            }
+//
+//            LocalDateTime windowStart = solicitud.getHoraInicioSimulacion();
+//            LocalDateTime windowEnd = solicitud.getHoraFinSimulacion();
+//
+//            log.info("Ventana temporal: {} -> {}", windowStart, windowEnd);
+//
+//            // ==============================
+//            // 2. Ejecutar ALNS COMPLETO
+//            // ==============================
+//            ResultadoAlgoritmoDTO fullResult = ejecutarAlgoritmoInterno(solicitud);
+//
+//            if (!fullResult.getExitoso()) {
+//                return ResponseEntity.ok(fullResult);
+//            }
+//
+//            // ==============================
+//            // 3. Filtrar SOLO productos cuya horaSalida reconstruida cae dentro de la ventana
+//            // ==============================
+//            List<RutaProductoDTO> rutasVentana = fullResult.getRutasProductos().stream()
+//                    .filter(r -> {
+//                        LocalDateTime salida = r.getHoraSalida();
+//                        return salida != null &&
+//                                !salida.isBefore(windowStart) &&
+//                                !salida.isAfter(windowEnd);
+//                    })
+//                    .toList();
+//
+//            log.info("Productos en ventana: {}", rutasVentana.size());
+//
+//            // ==============================
+//            // 4. Reconstruir mapa {Producto → Vuelos} para el conversor
+//            // ==============================
+//            Map<Producto, ArrayList<Vuelo>> mapaVentana = reconstruirMapa(rutasVentana);
+//
+//            // ==============================
+//            // 5. Convertir solo la ventana al formato DTO completo para el frontend
+//            // ==============================
+//            ResultadoAlgoritmoDTO resultadoVentana =
+//                    convertirSolucionAResultadoConSalida(
+//                            mapaVentana,
+//                            windowStart,
+//                            windowEnd,
+//                            0
+//                    );
+//
+//            resultadoVentana.setMensaje(
+//                    "Ventana procesada: " + windowStart + " → " + windowEnd
+//            );
+//
+//            return ResponseEntity.ok(resultadoVentana);
+//
+//        } catch (RuntimeException e) {
+//            log.error("❌ Error en /diario", e);
+//
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                .body(ResultadoAlgoritmoDTO.builder()
+//                        .exitoso(false)
+//                        .mensaje("Error: " + e.getMessage())
+//                        .horaInicio(horaInicioBackend)
+//                        .horaFin(LocalDateTime.now())
+//                        .build()
+//                );
+//        }
+//    }
+
     private ResultadoAlgoritmoDTO ejecutarAlgoritmoInterno(AlnsRequestDTO solicitud) {
         return ejecutarAlgoritmo(solicitud,1).getBody();
     }
