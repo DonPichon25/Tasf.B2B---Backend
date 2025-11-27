@@ -19,38 +19,41 @@ import java.util.List;
  * Implementación de FuenteDatosInput que lee desde la base de datos PostgreSQL
  * usando repositorios JPA de Spring.
  * 
- * Permite al algoritmo trabajar con datos persistidos en BD en lugar de archivos.
+ * Permite al algoritmo trabajar con datos persistidos en BD en lugar de
+ * archivos.
  */
 @Component
 public class FuenteDatosBaseDatos implements FuenteDatosInput {
-    
+
     @Autowired
     private AeropuertoRepository aeropuertoRepository;
-    
+
     @Autowired
     private VueloRepository vueloRepository;
-    
+
     @Autowired
     private PedidoRepository pedidoRepository;
     @Autowired
     private CancelacionRepository cancelacionRepository;
+
     @Override
     public void inicializar() {
         // Spring ya inicializó los repositories
     }
-    
+
     @Override
     public String obtenerNombreFuente() {
         return "BASEDATOS";
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<Aeropuerto> cargarAeropuertos() {
         try {
             List<Aeropuerto> aeropuertos = aeropuertoRepository.findAll();
-            
-            // ✅ Forzar inicialización de relaciones LAZY para evitar LazyInitializationException
+
+            // ✅ Forzar inicialización de relaciones LAZY para evitar
+            // LazyInitializationException
             // La anotación @Transactional mantiene la sesión de Hibernate abierta
             for (Aeropuerto aeropuerto : aeropuertos) {
                 if (aeropuerto.getCiudad() != null) {
@@ -62,8 +65,9 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
                     aeropuerto.getAlmacen().getCapacidadMaxima();
                 }
             }
-            
-            System.out.println("✓ Cargados " + aeropuertos.size() + " aeropuertos desde BD (con relaciones inicializadas)");
+
+            System.out.println(
+                    "✓ Cargados " + aeropuertos.size() + " aeropuertos desde BD (con relaciones inicializadas)");
             return aeropuertos;
         } catch (Exception e) {
             System.err.println("✗ Error cargando aeropuertos desde BD: " + e.getMessage());
@@ -71,13 +75,13 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
             return List.of();
         }
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public List<Vuelo> cargarVuelos(List<Aeropuerto> aeropuertos) {
         try {
             List<Vuelo> vuelos = vueloRepository.findAll();
-            
+
             // ✅ Forzar inicialización de relaciones LAZY
             // La anotación @Transactional mantiene la sesión de Hibernate abierta
             for (Vuelo vuelo : vuelos) {
@@ -94,7 +98,7 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
                     }
                 }
             }
-            
+
             System.out.println("✓ Cargados " + vuelos.size() + " vuelos desde BD (con relaciones inicializadas)");
             return vuelos;
         } catch (Exception e) {
@@ -103,6 +107,7 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
             return List.of();
         }
     }
+
     @Override
     @Transactional(readOnly = true)
     public List<Cancelacion> cargarCancelaciones(List<Vuelo> vuelos) {
@@ -154,9 +159,9 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
         try {
             // ⚠️ ADVERTENCIA: Cargar TODOS los pedidos puede ser lento con datasets grandes
             // Considera usar cargarPedidosPorVentanaDeTiempo() en su lugar
-            
+
             List<Pedido> pedidos = pedidoRepository.findAll();
-            
+
             // ✅ Forzar inicialización de relaciones LAZY NECESARIAS
             // La anotación @Transactional mantiene la sesión de Hibernate abierta
             int totalProductos = 0;
@@ -168,16 +173,16 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
                         pedido.getCliente().getCiudadRecojo().getNombre();
                     }
                 }
-                
+
                 // ⚡ OPTIMIZACIÓN: NO cargar productos aquí
                 // Usar cantidadProductos directo (campo en tabla pedidos)
                 int cantProductos = pedido.getCantidadProductosRapido();
                 totalProductos += cantProductos;
             }
-            
+
             System.out.println("✓ Cargados " + pedidos.size() + " pedidos desde BD (con relaciones inicializadas)");
             System.out.println("✓ Total productos en todos los pedidos: " + totalProductos + " (sin cargar lista)");
-            
+
             return pedidos;
         } catch (Exception e) {
             System.err.println("✗ Error cargando pedidos desde BD: " + e.getMessage());
@@ -185,9 +190,10 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
             return List.of();
         }
     }
-    
+
     /**
-     * 🚀 OPTIMIZADO: Implementación optimizada para cargar pedidos por ventana de tiempo
+     * 🚀 OPTIMIZADO: Implementación optimizada para cargar pedidos por ventana de
+     * tiempo
      * Usa query custom en lugar de cargar todo y filtrar en memoria
      */
     @Override
@@ -202,23 +208,26 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
             System.out.println("Hora inicio: " + horaInicio);
             System.out.println("Hora fin: " + horaFin);
             System.out.println("========================================");
-            
+
             long startTime = System.currentTimeMillis();
-            
-            // ⚡ OPTIMIZACIÓN 1: Query optimizada - solo pedidos en ventana
-            List<Pedido> pedidos = pedidoRepository.findByFechaPedidoBetween(horaInicio, horaFin);
-            
+
+            // SOLUCIÓN: Cargar TODOS los pedidos de la BD
+            // Los pedidos ya fueron filtrados al momento de cargarlos desde archivos
+            // No tiene sentido filtrar dos veces con parámetros potencialmente diferentes
+            List<Pedido> pedidos = pedidoRepository.findAll();
+
             long queryTime = System.currentTimeMillis();
             System.out.println("⏱️  Query ejecutada en " + (queryTime - startTime) + "ms");
-            
+            System.out.println("✓ Cargando TODOS los pedidos de BD (ya pre-filtrados): " + pedidos.size());
+
             // ⚡ OPTIMIZACIÓN 2: Contar productos SIN cargarlos
             // Usar el campo cantidadProductos directo
             Long totalProductosQuery = pedidoRepository.sumarCantidadProductosEnRango(horaInicio, horaFin);
             int totalProductos = (totalProductosQuery != null) ? totalProductosQuery.intValue() : 0;
-            
+
             long countTime = System.currentTimeMillis();
             System.out.println("⏱️  Conteo de productos en " + (countTime - queryTime) + "ms");
-            
+
             // ✅ Forzar inicialización solo de relaciones NECESARIAS (cliente, ciudad)
             for (Pedido pedido : pedidos) {
                 // Forzar carga de cliente (necesario para el algoritmo)
@@ -230,17 +239,17 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
                 }
                 // ⚡ NO cargar productos - se cargarán LAZY solo si se necesitan
             }
-            
+
             long initTime = System.currentTimeMillis();
             System.out.println("⏱️  Inicialización de relaciones en " + (initTime - countTime) + "ms");
-            
+
             System.out.println("========================================");
             System.out.println("✅ CARGA COMPLETADA");
             System.out.println("✓ Pedidos cargados: " + pedidos.size());
             System.out.println("✓ Total productos: " + totalProductos + " (conteo optimizado)");
             System.out.println("✓ Tiempo total: " + (initTime - startTime) + "ms");
             System.out.println("========================================");
-            
+
             return pedidos;
         } catch (Exception e) {
             System.err.println("✗ Error cargando pedidos por ventana de tiempo: " + e.getMessage());
@@ -249,4 +258,3 @@ public class FuenteDatosBaseDatos implements FuenteDatosInput {
         }
     }
 }
-
