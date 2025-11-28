@@ -198,38 +198,38 @@ public class ALNSSolver {
         inicializarT0();
         
         // 6.5. NUEVO: Cargar asignaciones existentes si estamos en modo ventana de tiempo (PREFILL)
-        if (horaInicio != null && horaFin != null) {
-            System.out.println("\n=== CARGANDO ESTADO EXISTENTE DE BD (PREFILL) ===");
-            try {
-                // Verificar si la fuente de datos soporta cargar asignaciones existentes
-                if (fuenteDatos instanceof com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) {
-                    com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos fuenteBD = 
-                        (com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) fuenteDatos;
-                    
-                    Map<String, List<Producto>> asignacionesExistentes = 
-                        fuenteBD.cargarAsignacionesExistentes(horaInicio, horaFin);
-                    
-                    if (asignacionesExistentes != null && !asignacionesExistentes.isEmpty()) {
-                        // Inicializar capacidades de vuelos desde BD
-                        inicializarCapacidadesVuelosDesdeDB(asignacionesExistentes);
-                        
-                        // Inicializar ocupación de almacenes desde BD
-                        inicializarOcupacionAlmacenesDesdeDB(asignacionesExistentes);
-                        
-                        System.out.println("✓ Estado de BD cargado - algoritmo trabajará sobre asignaciones existentes");
-                    } else {
-                        System.out.println("✓ No hay asignaciones previas - ejecución desde cero");
-                    }
-                } else {
-                    System.out.println("✓ Fuente de datos no soporta prefill - ejecución desde cero");
-                }
-            } catch (Exception e) {
-                System.err.println("⚠ ADVERTENCIA: Error cargando estado de BD: " + e.getMessage());
-                System.err.println("⚠ Continuando con ejecución desde cero");
-                e.printStackTrace();
-            }
-            System.out.println("=============================================================\n");
-        }
+//        if (horaInicio != null && horaFin != null) {
+//            System.out.println("\n=== CARGANDO ESTADO EXISTENTE DE BD (PREFILL) ===");
+//            try {
+//                // Verificar si la fuente de datos soporta cargar asignaciones existentes
+//                if (fuenteDatos instanceof com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) {
+//                    com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos fuenteBD =
+//                        (com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) fuenteDatos;
+//
+//                    Map<String, List<Producto>> asignacionesExistentes =
+//                        fuenteBD.cargarAsignacionesExistentes(horaInicio, horaFin);
+//
+//                    if (asignacionesExistentes != null && !asignacionesExistentes.isEmpty()) {
+//                        // Inicializar capacidades de vuelos desde BD
+//                        inicializarCapacidadesVuelosDesdeDB(asignacionesExistentes);
+//
+//                        // Inicializar ocupación de almacenes desde BD
+//                        inicializarOcupacionAlmacenesDesdeDB(asignacionesExistentes);
+//
+//                        System.out.println("✓ Estado de BD cargado - algoritmo trabajará sobre asignaciones existentes");
+//                    } else {
+//                        System.out.println("✓ No hay asignaciones previas - ejecución desde cero");
+//                    }
+//                } else {
+//                    System.out.println("✓ Fuente de datos no soporta prefill - ejecución desde cero");
+//                }
+//            } catch (Exception e) {
+//                System.err.println("⚠ ADVERTENCIA: Error cargando estado de BD: " + e.getMessage());
+//                System.err.println("⚠ Continuando con ejecución desde cero");
+//                e.printStackTrace();
+//            }
+//            System.out.println("=============================================================\n");
+//        }
         
         // 7. RNG y operadores
         this.aleatorio = new Random(System.currentTimeMillis());
@@ -3618,12 +3618,12 @@ public class ALNSSolver {
      */
     private Pedido buscarPedidoPorId(Integer pedidoId) {
         if (pedidoId == null) return null;
-        
-        return pedidos.stream()
-            .filter(p -> pedidoId.equals(p.getId()))
-            .findFirst()
-            .orElse(null);
 
+        return pedidos.stream()
+                .filter(p -> pedidoId.equals(p.getId()))
+                .findFirst()
+                .orElse(null);
+    }
     /**
      * NUEVO: Obtiene la solución a nivel de producto CON tiempos absolutos.
      * Esta versión incluye fechas de salida/llegada calculadas por el ALNS.

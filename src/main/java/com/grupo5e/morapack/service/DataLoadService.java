@@ -129,19 +129,33 @@ public class DataLoadService {
      * 
      * @return Estadísticas de datos disponibles
      */
-    public EstadoDatos obtenerEstadoDatos() {
+    public EstadoDatos obtenerEstadoDatosNoDiario() {
         EstadoDatos estado = new EstadoDatos();
         
         try {
             estado.totalAeropuertos = aeropuertoService.listar().size();
-            estado.totalPedidos = pedidoService.listar().size();
-            estado.pedidosPendientes = (int) pedidoService.listar().stream()
-                    .filter(p -> "PENDIENTE".equals(p.getEstado().toString()))
+
+            // Contar SOLO pedidos de tipoData = 0 (data de prueba)
+            // Usar listado y filtrar por tipoData para asegurar consistencia con otros filtros
+            estado.totalPedidos = (int) pedidoService.listar().stream()
+                    .filter(p -> p.getTipoData() == 0)
                     .count();
+
+            // Contar pendientes entre los pedidos tipoData = 0
+            estado.pedidosPendientes = (int) pedidoService.listar().stream()
+                    .filter(p -> p.getTipoData() == 0 && "PENDIENTE".equals(p.getEstado().toString()))
+                    .count();
+
             estado.exito = true;
+
+            // Log para debugging: mostrar los totales calculados
+            log.info("EstadoDatos obtenido: totalAeropuertos={}, totalPedidos={}, pedidosPendientes={}",
+                    estado.totalAeropuertos, estado.totalPedidos, estado.pedidosPendientes);
+
         } catch (Exception e) {
             estado.exito = false;
             estado.mensajeError = "Error obteniendo estado: " + e.getMessage();
+            log.error("Error obteniendo estado de datos: {}", e.getMessage(), e);
         }
         
         return estado;

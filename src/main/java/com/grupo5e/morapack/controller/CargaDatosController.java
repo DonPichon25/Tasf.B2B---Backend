@@ -234,7 +234,7 @@ public class CargaDatosController {
         }
     }
 
-    @GetMapping("/estado")
+    @GetMapping("/estadoNoDiario")
     @Operation(
             summary = "Obtener estado de datos",
             description = "Retorna estadísticas sobre los datos actualmente cargados en la base de datos"
@@ -250,9 +250,13 @@ public class CargaDatosController {
                     description = "Error al obtener estado"
             )
     })
-    public ResponseEntity<Map<String, Object>> obtenerEstado() {
+    public ResponseEntity<Map<String, Object>> obtenerEstadoNoDiario() {
         try {
-            DataLoadService.EstadoDatos estado = dataLoadService.obtenerEstadoDatos();
+            DataLoadService.EstadoDatos estado = dataLoadService.obtenerEstadoDatosNoDiario();
+
+            // Log para depuración: mostrar el objeto EstadoDatos completo
+            log.info("obtenerEstadoNoDiario -> EstadoDatos: totalAeropuertos={}, totalPedidos={}, pedidosPendientes={}, exito={}, mensaje={}",
+                    estado.getTotalAeropuertos(), estado.getTotalPedidos(), estado.getPedidosPendientes(), estado.getExito(), estado.getMensajeError());
 
             Map<String, Object> respuesta = new HashMap<>();
             respuesta.put("exito", estado.getExito());

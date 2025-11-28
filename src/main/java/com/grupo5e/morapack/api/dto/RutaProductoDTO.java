@@ -6,15 +6,8 @@ import lombok.*;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-//import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * DTO para la ruta completa de un producto individual.
- * Permite tracking a nivel de producto como especifica el problema:
- * "Los productos pueden llegar en distintos momentos siempre que todos lleguen
- * dentro del plazo establecido"
- */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -22,7 +15,6 @@ import java.util.List;
 @Builder
 @Schema(description = "Ruta asignada a un producto individual con su secuencia de vuelos")
 public class RutaProductoDTO {
-
     @Schema(description = "ID del producto", example = "1234")
     private Integer idProducto;
 
@@ -67,8 +59,6 @@ public class RutaProductoDTO {
 
     @Schema(description = "Fecha y hora de llegada del primer vuelo del producto")
     private LocalDateTime horaLlegada;
-
-}
 
     // NUEVOS CAMPOS: Información temporal calculada por ALNS
 

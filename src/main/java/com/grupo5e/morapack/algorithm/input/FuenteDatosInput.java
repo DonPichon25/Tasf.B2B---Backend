@@ -68,7 +68,7 @@ public interface FuenteDatosInput {
                     LocalDateTime fechaPedido = p.getFechaPedido();
                     return fechaPedido != null &&
                            !fechaPedido.isBefore(horaInicio) &&
-                           !fechaPedido.isAfter(horaFin);
+                           !fechaPedido.isAfter(horaFin) && tipoData==0;
                 })
                 .toList();
     }
