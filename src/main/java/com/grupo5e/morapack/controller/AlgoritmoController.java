@@ -644,7 +644,18 @@ public class AlgoritmoController {
                         VueloSimpleDTO vuelo = info.vuelo;
                         List<Integer> pedidosList = new ArrayList<>(info.idsPedidos);
 
-                        // Evento de salida
+                        // Calcular si este vuelo es destino final para ALGÚN pedido
+                        // Es destino final si el codigoDestino del vuelo coincide con el destino final
+                        // del pedido
+                        String destinoVuelo = vuelo.getCodigoDestino();
+                        boolean esDestinoFinal = pedidosList.stream()
+                                        .anyMatch(idPedido -> {
+                                                String destinoFinalPedido = pedidoDestinoFinal.get(idPedido);
+                                                return destinoFinalPedido != null
+                                                                && destinoFinalPedido.equals(destinoVuelo);
+                                        });
+
+                        // Evento de salida (incluye esDestinoFinal para consistencia)
                         EventoLineaDeTiempoVueloDTO eventoSalida = EventoLineaDeTiempoVueloDTO.builder()
                                         .idEvento("DEP-" + contadorEventos)
                                         .tipoEvento("DEPARTURE")
@@ -659,6 +670,7 @@ public class AlgoritmoController {
                                         .ciudadDestino(vuelo.getCodigoDestino())
                                         .codigoIATAOrigen(vuelo.getCodigoOrigen())
                                         .codigoIATADestino(vuelo.getCodigoDestino())
+                                        .esDestinoFinal(esDestinoFinal)
                                         .idAeropuertoOrigen(vuelo.getIdAeropuertoOrigen())
                                         .idAeropuertoDestino(vuelo.getIdAeropuertoDestino())
                                         .tiempoTransporteDias(info.horasTransporte / 24.0)
@@ -666,18 +678,7 @@ public class AlgoritmoController {
                                         .build();
                         eventos.add(eventoSalida);
 
-                        // Calcular si este vuelo es destino final para ALGÚN pedido
-                        // Es destino final si el codigoDestino del vuelo coincide con el destino final
-                        // del pedido
-                        String destinoVuelo = vuelo.getCodigoDestino();
-                        boolean esDestinoFinal = pedidosList.stream()
-                                        .anyMatch(idPedido -> {
-                                                String destinoFinalPedido = pedidoDestinoFinal.get(idPedido);
-                                                return destinoFinalPedido != null
-                                                                && destinoFinalPedido.equals(destinoVuelo);
-                                        });
-
-                        // Evento de llegada
+                        // Evento de llegada (usa el mismo esDestinoFinal ya calculado arriba)
                         EventoLineaDeTiempoVueloDTO eventoLlegada = EventoLineaDeTiempoVueloDTO.builder()
                                         .idEvento("ARR-" + contadorEventos)
                                         .tipoEvento("ARRIVAL")
