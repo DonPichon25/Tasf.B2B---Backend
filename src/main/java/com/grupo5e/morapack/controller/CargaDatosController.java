@@ -85,6 +85,11 @@ public class CargaDatosController {
 
             String rutaDirectorio = directorioArchivos != null ? directorioArchivos : obtenerDirectorioPredeterminado();
 
+            // Restar 5 horas a horaFin para compensar zona horaria UTC-5
+            if (horaFin != null) {
+                horaFin = horaFin.minusHours(5);
+            }
+
             log.info("Directorio: {}", rutaDirectorio);
             if (horaInicio != null && horaFin != null) {
                 log.info("Ventana de tiempo: {} a {}", horaInicio, horaFin);

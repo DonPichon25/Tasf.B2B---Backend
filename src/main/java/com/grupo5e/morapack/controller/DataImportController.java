@@ -225,6 +225,8 @@ public class DataImportController {
             }
             if (horaFin != null && !horaFin.isEmpty()) {
                 horaFinDateTime = LocalDateTime.parse(horaFin);
+                // Restar 5 horas para compensar zona horaria UTC-5
+                horaFinDateTime = horaFinDateTime.minusHours(5);
             }
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
@@ -289,6 +291,8 @@ public class DataImportController {
             }
             if (horaFin != null && !horaFin.isEmpty()) {
                 horaFinDateTime = LocalDateTime.parse(horaFin);
+                // Restar 5 horas para compensar zona horaria UTC-5
+                horaFinDateTime = horaFinDateTime.minusHours(5);
             }
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
