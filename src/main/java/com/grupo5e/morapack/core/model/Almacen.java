@@ -31,5 +31,8 @@ public class Almacen {
     
     @OneToOne(mappedBy = "almacen")
     private Aeropuerto aeropuerto;
+
+    @Column(nullable = true)
+    private int tipoData;
 }
 

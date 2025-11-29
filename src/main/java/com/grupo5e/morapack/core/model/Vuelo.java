@@ -61,6 +61,8 @@ public class Vuelo {
     @ManyToMany(mappedBy = "vuelos")
     private List<Ruta> rutas;
 
+    @Column(nullable = true)
+    private int tipoData;
     /**
      * Genera el identificador único del vuelo basado en ruta y horario.
      * Formato: "ORIGEN-DESTINO-HH:MM"

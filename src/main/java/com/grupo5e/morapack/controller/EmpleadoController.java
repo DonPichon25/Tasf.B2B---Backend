@@ -5,6 +5,7 @@ import com.grupo5e.morapack.api.dto.ErrorResponseDTO;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.core.enums.Rol;
 import com.grupo5e.morapack.core.model.Empleado;
+import com.grupo5e.morapack.core.model.UsuarioId;
 import com.grupo5e.morapack.service.EmpleadoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -52,7 +53,8 @@ public class EmpleadoController {
     public ResponseEntity<Empleado> obtenerPorId(
             @Parameter(description = "ID del empleado", required = true)
             @PathVariable Long id) {
-        Empleado empleado = empleadoService.buscarPorId(id);
+        UsuarioId usuarioId = new UsuarioId(id,1);
+        Empleado empleado = empleadoService.buscarPorId(usuarioId);
         if (empleado == null) {
             throw new ResourceNotFoundException("Empleado", "id", id);
         }
@@ -91,8 +93,10 @@ public class EmpleadoController {
     })
     @PostMapping
     public ResponseEntity<Long> crear(@Valid @RequestBody Empleado empleado) {
-        Long id = empleadoService.insertar(empleado);
-        return ResponseEntity.status(HttpStatus.CREATED).body(id);
+        UsuarioId usuarioId = new UsuarioId(empleado.getUsuarioId().getId(),1);
+        empleado.setUsuarioId(usuarioId);
+        UsuarioId id = empleadoService.insertar(empleado);
+        return ResponseEntity.status(HttpStatus.CREATED).body(id.getId());
     }
 
     @Operation(summary = "Actualizar empleado", description = "Actualiza los datos de un empleado existente")
@@ -105,7 +109,8 @@ public class EmpleadoController {
             @Parameter(description = "ID del empleado", required = true)
             @PathVariable Long id,
             @Valid @RequestBody Empleado empleado) {
-        Empleado actualizado = empleadoService.actualizar(id, empleado);
+        UsuarioId usuarioId = new UsuarioId(id,1);
+        Empleado actualizado = empleadoService.actualizar(usuarioId, empleado);
         return ResponseEntity.ok(actualizado);
     }
 
@@ -118,29 +123,31 @@ public class EmpleadoController {
     public ResponseEntity<Void> eliminar(
             @Parameter(description = "ID del empleado", required = true)
             @PathVariable Long id) {
-        empleadoService.eliminar(id);
+        UsuarioId usuarioId = new UsuarioId(id,1);
+        empleadoService.eliminar(usuarioId);
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Crear empleados en bulk", description = "Registra múltiples empleados en una sola operación")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Empleados creados exitosamente"),
-            @ApiResponse(responseCode = "400", description = "Error en validación de datos")
-    })
-    @PostMapping("/bulk")
-    public ResponseEntity<BulkResponseDTO<Long>> crearBulk(@Valid @RequestBody List<Empleado> empleados) {
-        List<Empleado> creados = empleadoService.insertarBulk(empleados);
-        List<Long> ids = creados.stream().map(Empleado::getId).collect(Collectors.toList());
-        
-        BulkResponseDTO<Long> response = BulkResponseDTO.<Long>builder()
-                .totalProcesados(empleados.size())
-                .exitosos(ids.size())
-                .fallidos(0)
-                .idsExitosos(ids)
-                .mensaje("Empleados creados exitosamente")
-                .build();
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
+//    @Operation(summary = "Crear empleados en bulk", description = "Registra múltiples empleados en una sola operación")
+//    @ApiResponses(value = {
+//            @ApiResponse(responseCode = "201", description = "Empleados creados exitosamente"),
+//            @ApiResponse(responseCode = "400", description = "Error en validación de datos")
+//    })
+//    @PostMapping("/bulk")
+//    public ResponseEntity<BulkResponseDTO<UsuarioId>> crearBulk(@Valid @RequestBody List<Empleado> empleados) {
+//        List<Empleado> creados = empleadoService.insertarBulk(empleados);
+//
+//        List<UsuarioId> ids = creados.stream().map(Empleado::getUsuarioId).collect(Collectors.toList());
+//
+//        BulkResponseDTO<Long> response = BulkResponseDTO.<Long>builder()
+//                .totalProcesados(empleados.size())
+//                .exitosos(ids.size())
+//                .fallidos(0)
+//                .idsExitosos(ids)
+//                .mensaje("Empleados creados exitosamente")
+//                .build();
+//
+//        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+//    }
 }
 

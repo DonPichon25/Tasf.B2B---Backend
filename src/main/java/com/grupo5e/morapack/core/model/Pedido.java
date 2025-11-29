@@ -32,8 +32,14 @@ public class Pedido {
     private String nombre;
 
     // Relación: muchos pedidos pertenecen a un cliente
+//    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+//    @JoinColumn(name = "cliente_id", nullable = true)
+//    private Cliente cliente;
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
-    @JoinColumn(name = "cliente_id", nullable = true)
+    @JoinColumns({
+            @JoinColumn(name = "cliente_id", referencedColumnName = "id", nullable = true),
+            @JoinColumn(name = "cliente_tipo_data", referencedColumnName = "tipo_data", nullable = true)
+    })
     private Cliente cliente;
 
     // Aeropuerto destino
@@ -76,7 +82,9 @@ public class Pedido {
     private List<PlanViaje> planesViaje;
 
     private int cantidadProductos;
-    
+
+    @Column(nullable = true)
+    private int tipoData;
     // ===================================================================
     // MÉTODOS DE OPTIMIZACIÓN
     // ===================================================================

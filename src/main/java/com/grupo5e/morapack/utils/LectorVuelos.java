@@ -63,6 +63,7 @@ public class LectorVuelos {
                 
                 try {
                     Vuelo vuelo = parsearLineaVuelo(linea, mapaAeropuertos);
+                    vuelo.setTipoData(0);
                     if (vuelo != null) {
                         vuelos.add(vuelo);
                     }

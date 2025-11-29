@@ -15,10 +15,14 @@ import com.grupo5e.morapack.core.enums.Rol;
 @Table(name = "usuarios")
 @Inheritance(strategy = InheritanceType.JOINED)  // Herencia en BD
 public class Usuario {
-    @Id
-//    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @EmbeddedId
+    private UsuarioId usuarioId;
+    // Exponer id y tipoData como columnas individuales para FK
+    @Column(name = "id", insertable = false, updatable = false)
     private Long id;
 
+    @Column(name = "tipo_data", insertable = false, updatable = false)
+    private Integer tipoData;
     // Credenciales
     @Column(nullable = false, unique = true, length = 100)
     private String usernameOrEmail; // Para clientes puede ser correo, para empleados un username

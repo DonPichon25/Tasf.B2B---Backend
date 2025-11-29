@@ -60,14 +60,15 @@ public interface FuenteDatosInput {
     default List<Pedido> cargarPedidosPorVentanaDeTiempo(
             List<Aeropuerto> aeropuertos,
             LocalDateTime horaInicio,
-            LocalDateTime horaFin) {
+            LocalDateTime horaFin,
+            int tipoData) {
         // Implementación por defecto: cargar todos y filtrar
         return cargarPedidos(aeropuertos).stream()
                 .filter(p -> {
                     LocalDateTime fechaPedido = p.getFechaPedido();
                     return fechaPedido != null &&
                            !fechaPedido.isBefore(horaInicio) &&
-                           !fechaPedido.isAfter(horaFin);
+                           !fechaPedido.isAfter(horaFin) && tipoData==0;
                 })
                 .toList();
     }

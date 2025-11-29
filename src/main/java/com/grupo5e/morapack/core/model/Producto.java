@@ -41,4 +41,24 @@ public class Producto {
 
     @Enumerated(EnumType.STRING)
     private EstadoProducto estado;
+
+    /**
+     * ID de la instancia de vuelo asignada a este producto.
+     * Formato: "FL-{vueloId}-DAY-{day}-{HHmm}"
+     * Ejemplo: "FL-45-DAY-0-0800"
+     * 
+     * Permite tracking específico de qué salida diaria transporta este producto.
+     */
+    @Column(name = "instancia_vuelo_asignada", length = 50)
+    private String instanciaVueloAsignada;
+
+    /**
+     * Tiempo de llegada estimado o real del producto al destino final.
+     * Usado para calcular tiempos de entrega y actualizar estados.
+     */
+    @Column(name = "fecha_hora_llegada")
+    private LocalDateTime fechaHoraLlegada;
+
+    @Column(nullable = true)
+    private int tipoData;
 }

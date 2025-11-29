@@ -32,7 +32,7 @@ public class AuthController {
 
         return ResponseEntity.ok(
                 new AuthResponse(
-                        user.getId(),
+                        user.getUsuarioId().getId(),
                         user.getUsernameOrEmail(),
                         "Usuario",               // cámbialo cuando tengas nombre real
                         user.getRol(),

@@ -14,10 +14,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Lector de Pedidos V2 - Formato del MoraPack-Backend
@@ -34,7 +32,7 @@ import java.util.Map;
  */
 public class LectorPedidosV2 {
     private final String directorioDatos;
-    private final ArrayList<Aeropuerto> aeropuertos;
+    private final List<Aeropuerto> aeropuertos;
     private final Map<String, Aeropuerto> mapaAeropuertos;
 
     // Servicios necesarios
@@ -43,13 +41,13 @@ public class LectorPedidosV2 {
     private final BatchService batchService;
 
     // Caché de clientes para evitar búsquedas repetidas
-    private final Map<String, Cliente> cacheClientes = new HashMap<>();
+    private Map<UsuarioId, Cliente> cacheClientes = new HashMap<>();
     
     // Lista de clientes nuevos pendientes de guardar en batch
     private final List<Cliente> clientesNuevosPendientes = new ArrayList<>();
 
     public LectorPedidosV2(String directorioDatos,
-                          ArrayList<Aeropuerto> aeropuertos,
+                          List<Aeropuerto> aeropuertos,
                           PedidoService pedidoService,
                           ClienteService clienteService,
                           BatchService batchService) {
@@ -118,29 +116,31 @@ public class LectorPedidosV2 {
 
         LocalDateTime tiempoInicio = LocalDateTime.now();
 
+
         // Procesar cada archivo
         for (File archivo : archivosPedidos) {
             String nombreArchivo = archivo.getName();
+            this.cacheClientes = obtenerTodosClientesMapeados(0);
             // Extraer código de aeropuerto del nombre
             // Ejemplo: _pedidos_SPIM_ -> SPIM o _pedidos_EBCI_.txt -> EBCI
-            String codigoAeropuertoOrigen = nombreArchivo
+            String codigoAeropuertoDestino = nombreArchivo
                     .replace("_pedidos_", "")
                     .replace(".txt", "")
                     .replace("_", "")
                     .trim()
                     .toUpperCase();
+//
+//            Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(colocarAeropuertoPrincipalAleatorio(codigoAeropuertoDestino));
+//            if (aeropuertoOrigen == null) {
+//                System.err.println("WARNING: Aeropuerto origen desconocido: " + codigoAeropuertoDestino + " en " + nombreArchivo);
+//                resultado.erroresArchivos++;
+//                continue;
+//            }
 
-            Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(codigoAeropuertoOrigen);
-            if (aeropuertoOrigen == null) {
-                System.err.println("WARNING: Aeropuerto origen desconocido: " + codigoAeropuertoOrigen + " en " + nombreArchivo);
-                resultado.erroresArchivos++;
-                continue;
-            }
-
-            System.out.println("\nProcesando archivo: " + nombreArchivo + " (origen: " + codigoAeropuertoOrigen + ")");
+            System.out.println("\nProcesando archivo: " + nombreArchivo + " (destino: " + codigoAeropuertoDestino + ")");
 
             try {
-                procesarArchivoPedidos(archivo, aeropuertoOrigen, horaInicioSimulacion, horaFinSimulacion, resultado);
+                procesarArchivoPedidos(archivo, horaInicioSimulacion, horaFinSimulacion, resultado);
             } catch (Exception e) {
                 System.err.println("ERROR procesando archivo " + nombreArchivo + ": " + e.getMessage());
                 e.printStackTrace();
@@ -164,14 +164,20 @@ public class LectorPedidosV2 {
 
         return resultado;
     }
+    public Map<UsuarioId, Cliente> obtenerTodosClientesMapeados(int tipoData) {
+        List<Cliente> lista = clienteService.listarPorTipoData(tipoData);
+        return lista.stream().collect(Collectors.toMap(
+                Cliente::getUsuarioId,
+                c -> c
+        ));
+    }
 
     private void procesarArchivoPedidos(
             File archivo,
-            Aeropuerto aeropuertoOrigen,
             LocalDateTime horaInicio,
             LocalDateTime horaFin,
             ResultadoCargaPedidos resultado) throws IOException {
-
+        int i=1;
         try (BufferedReader reader = new BufferedReader(new FileReader(archivo))) {
             String linea;
             int numeroLinea = 0;
@@ -186,9 +192,10 @@ public class LectorPedidosV2 {
                 }
 
                 try {
-                    Pedido pedido = parsearLineaPedido(linea, aeropuertoOrigen);
+                    Pedido pedido = parsearLineaPedido(linea);
                     resultado.pedidosCargados++;
-
+                    //System.out.println("  ➕ Pedido parseado: " + i);
+                    i++;
                     // Filtrar por ventana de tiempo si se especificó
                     if (horaInicio != null && horaFin != null) {
                         if (pedido.getFechaPedido().isBefore(horaInicio) ||
@@ -241,7 +248,7 @@ public class LectorPedidosV2 {
      * Formato: id_pedido-aaaammdd-hh-mm-dest-###-IdClien
      * Ejemplo: 000000001-20250102-01-18-SPIM-003-0027081
      */
-    private Pedido parsearLineaPedido(String linea, Aeropuerto aeropuertoOrigen) {
+    private Pedido parsearLineaPedido(String linea) {
         String[] partes = linea.split("-");
         if (partes.length != 7) {
             throw new IllegalArgumentException("Formato inválido: esperado 7 campos, encontrado " + partes.length);
@@ -262,6 +269,11 @@ public class LectorPedidosV2 {
         int dia = Integer.parseInt(fechaStr.substring(6, 8));
         LocalDateTime fechaPedido = LocalDateTime.of(anio, mes, dia, hora, minuto, 0);
 
+        // Buscar aeropuerto origen (asumido como aeropuerto principal aleatorio)
+        Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(colocarAeropuertoPrincipalAleatorio(codigoAeropuertoDestino));
+        if (aeropuertoOrigen == null) {
+            throw new IllegalArgumentException("Aeropuerto origen desconocido para destino: " + codigoAeropuertoDestino);
+        }
         // Buscar aeropuerto destino
         Aeropuerto aeropuertoDestino = mapaAeropuertos.get(codigoAeropuertoDestino);
         if (aeropuertoDestino == null) {
@@ -279,7 +291,7 @@ public class LectorPedidosV2 {
         Pedido pedido = new Pedido();
         
         // Generar externalId compuesto: {AIRPORT_ORIGIN}-{FILE_ORDER_ID}
-        String externalId = aeropuertoOrigen.getCodigoIATA() + "-" + idPedidoStr;
+        String externalId = aeropuertoDestino.getCodigoIATA() + "-" + idPedidoStr;
         pedido.setExternalId(externalId);
         
         pedido.setNombre("PEDIDO-" + idPedidoStr + "-" + codigoAeropuertoDestino);
@@ -301,6 +313,7 @@ public class LectorPedidosV2 {
         ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido);
         pedido.setProductos(productos);
 
+        pedido.setTipoData(0);
         return pedido;
     }
 
@@ -321,7 +334,7 @@ public class LectorPedidosV2 {
             // y tienen el estado correcto de la BD
             for (Cliente clientePersistido : clientesGuardados) {
                 // Reemplazar en caché la instancia transient con la instancia persistida
-                cacheClientes.put(String.valueOf(clientePersistido.getId()), clientePersistido);
+                cacheClientes.put(clientePersistido.getUsuarioId(), clientePersistido);
             }
             
             System.out.println("  ✅ " + clientesGuardados.size() + " clientes guardados y caché actualizado");
@@ -338,26 +351,33 @@ public class LectorPedidosV2 {
      * OPTIMIZADO: Acumula clientes nuevos para guardarlos en batch antes de los pedidos
      */
     private Cliente obtenerOCrearCliente(String idClienteStr, Ciudad ciudadRecojo) {
+
+        // Key compuesto
+        UsuarioId key = new UsuarioId(Long.parseLong(idClienteStr), 0);
+
         // Verificar caché primero
-        if (cacheClientes.containsKey(idClienteStr)) {
-            return cacheClientes.get(idClienteStr);
+        if (cacheClientes.containsKey(key)) {
+            return cacheClientes.get(key);
         }
 
-        // Intentar buscar en BD
+//        // Intentar buscar en BD
+//        Long idCliente = Long.parseLong(idClienteStr); // Ajuste de ID según convención
+//        try {
+//            Cliente clienteExistente = clienteService.buscarPorId(idCliente,0);
+//            if (clienteExistente != null) {
+//                cacheClientes.put(new UsuarioId(idCliente,0), clienteExistente);
+//                return clienteExistente;
+//            }
+//        } catch (Exception e) {
+//            // Cliente no existe, continuar para crearlo
+//        }
         Long idCliente = Long.parseLong(idClienteStr);
-        try {
-            Cliente clienteExistente = clienteService.buscarPorId(idCliente);
-            if (clienteExistente != null) {
-                cacheClientes.put(idClienteStr, clienteExistente);
-                return clienteExistente;
-            }
-        } catch (Exception e) {
-            // Cliente no existe, continuar para crearlo
-        }
-
         // Crear nuevo cliente (sin persistir aún)
         Cliente nuevoCliente = new Cliente();
-        nuevoCliente.setId(idCliente);
+        UsuarioId usuarioId = new UsuarioId();
+        usuarioId.setId(idCliente);
+        usuarioId.setTipoData(0);
+        nuevoCliente.setUsuarioId(usuarioId);
         nuevoCliente.setNombres("Cliente " + idCliente);
         nuevoCliente.setCorreo("cliente" + idCliente + "@morapack.com");
         nuevoCliente.setCiudadRecojo(ciudadRecojo);
@@ -370,7 +390,7 @@ public class LectorPedidosV2 {
         clientesNuevosPendientes.add(nuevoCliente);
         
         // Guardar en caché (aunque aún no tenga ID de BD, está ok para referencias)
-        cacheClientes.put(idClienteStr, nuevoCliente);
+        cacheClientes.put(usuarioId, nuevoCliente);
         
         return nuevoCliente;
     }
@@ -384,6 +404,7 @@ public class LectorPedidosV2 {
             producto.setVolumen(1.0);  // Volumen por defecto
             producto.setEstado(EstadoProducto.EN_ALMACEN);
             producto.setPedido(pedido);
+            producto.setTipoData(0);
             productos.add(producto);
         }
         return productos;
@@ -413,10 +434,12 @@ public class LectorPedidosV2 {
             // En caso de que algún pedido tenga referencia a una instancia transient del caché antiguo,
             // actualizar con la instancia persistida del caché actualizado
             for (Pedido pedido : pedidos) {
-                if (pedido.getCliente() != null && pedido.getCliente().getId() != null) {
-                    String clienteId = String.valueOf(pedido.getCliente().getId());
+                if (pedido.getCliente() != null && pedido.getCliente().getUsuarioId() != null) {
+                    UsuarioId usuarioId = new UsuarioId();
+                    usuarioId = pedido.getCliente().getUsuarioId();
+                    //String clienteId = String.valueOf(pedido.getCliente().getId());
                     // Obtener la instancia persistida del caché (si existe)
-                    Cliente clientePersistido = cacheClientes.get(clienteId);
+                    Cliente clientePersistido = cacheClientes.get(usuarioId);
                     if (clientePersistido != null) {
                         pedido.setCliente(clientePersistido);
                     }
@@ -465,6 +488,23 @@ public class LectorPedidosV2 {
         public int pedidosFiltrados;
         public int erroresParseo;
         public int erroresArchivos;
+    }
+    // Método auxiliar para encontrar aeropuerto por defecto
+    private String colocarAeropuertoPrincipalAleatorio(String codigoDestino) {
+        // Lista de códigos IATA de los aeropuertos principales de MoraPack
+        String[] aeropuertosPrincipales = {"SPIM", "UBBB", "EBCI"};
+        ArrayList<String> aeropuertos = new ArrayList<>();
+
+        Random random = new Random();
+        for (int i = 0; i < 3; i++) {
+            if(Objects.equals(codigoDestino, aeropuertosPrincipales[i]))
+                continue;
+            aeropuertos.add(aeropuertosPrincipales[i]);
+        }
+        int indiceAleatorio = random.nextInt(aeropuertos.size());
+        String codigoIATAOrigen = aeropuertos.get(indiceAleatorio);
+        //System.out.println("🔀 Usando aeropuerto por defecto: " + codigoIATAOrigen);
+        return codigoIATAOrigen;
     }
 }
 

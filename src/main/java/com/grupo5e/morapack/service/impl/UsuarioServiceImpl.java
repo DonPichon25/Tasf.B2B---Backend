@@ -3,6 +3,7 @@ package com.grupo5e.morapack.service.impl;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.core.enums.Rol;
 import com.grupo5e.morapack.core.model.Usuario;
+import com.grupo5e.morapack.core.model.UsuarioId;
 import com.grupo5e.morapack.repository.UsuarioRepository;
 import com.grupo5e.morapack.service.UsuarioService;
 import org.springframework.stereotype.Service;
@@ -27,23 +28,23 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     @Transactional
-    public Long insertar(Usuario usuario) {
-        return usuarioRepository.save(usuario).getId();
+    public UsuarioId insertar(Usuario usuario) {
+        return usuarioRepository.save(usuario).getUsuarioId();
     }
 
     @Override
     @Transactional
-    public Usuario actualizar(Long id, Usuario usuario) {
+    public Usuario actualizar(UsuarioId id, Usuario usuario) {
         Usuario existente = buscarPorId(id);
         if (existente == null) {
             throw new ResourceNotFoundException("Usuario", "id", id);
         }
-        usuario.setId(id);
+        usuario.setUsuarioId(id);
         return usuarioRepository.save(usuario);
     }
 
     @Override
-    public Usuario buscarPorId(Long id) {
+    public Usuario buscarPorId(UsuarioId id) {
         return usuarioRepository.findById(id).orElse(null);
     }
 
@@ -59,7 +60,7 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
+    public void eliminar(UsuarioId id) {
         if (!existePorId(id)) {
             throw new ResourceNotFoundException("Usuario", "id", id);
         }
@@ -67,7 +68,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     }
 
     @Override
-    public boolean existePorId(Long id) {
+    public boolean existePorId(UsuarioId id) {
         return usuarioRepository.existsById(id);
     }
 }

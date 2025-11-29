@@ -42,7 +42,9 @@ public class Aeropuerto {
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "almacen_id")
     private Almacen almacen;
-    
+
+    @Column(nullable = true)
+    private int tipoData; // 0: Original, 1: Generado
     // Métodos de conveniencia para compatibilidad con código existente
     // Delegan al Almacen asociado
     
