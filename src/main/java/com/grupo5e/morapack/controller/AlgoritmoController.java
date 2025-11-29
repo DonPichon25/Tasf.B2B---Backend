@@ -1012,6 +1012,18 @@ private List<VueloSimpleDTO> convertirVuelosADTOConTiempos(ArrayList<Vuelo> vuel
             VueloSimpleDTO vuelo = info.vuelo;
             List<Integer> pedidosList = new ArrayList<>(info.idsPedidos);
 
+            // Calcular si este vuelo es destino final para ALGÚN pedido
+            // Es destino final si el codigoDestino del vuelo coincide con el destino final
+            // del pedido
+            String destinoVuelo = vuelo.getCodigoDestino();
+            boolean esDestinoFinal = pedidosList.stream()
+                    .anyMatch(idPedido -> {
+                        String destinoFinalPedido = pedidoDestinoFinal.get(idPedido);
+                        return destinoFinalPedido != null
+                                && destinoFinalPedido.equals(destinoVuelo);
+                    });
+
+            // Evento de llegada
             // Evento de salida
             EventoLineaDeTiempoVueloDTO eventoSalida = EventoLineaDeTiempoVueloDTO.builder()
                     .idEvento("DEP-" + contadorEventos)
@@ -1034,18 +1046,7 @@ private List<VueloSimpleDTO> convertirVuelosADTOConTiempos(ArrayList<Vuelo> vuel
                     .build();
             eventos.add(eventoSalida);
 
-            // Calcular si este vuelo es destino final para ALGÚN pedido
-            // Es destino final si el codigoDestino del vuelo coincide con el destino final
-            // del pedido
-            String destinoVuelo = vuelo.getCodigoDestino();
-            boolean esDestinoFinal = pedidosList.stream()
-                    .anyMatch(idPedido -> {
-                        String destinoFinalPedido = pedidoDestinoFinal.get(idPedido);
-                        return destinoFinalPedido != null
-                                && destinoFinalPedido.equals(destinoVuelo);
-                    });
 
-            // Evento de llegada
             EventoLineaDeTiempoVueloDTO eventoLlegada = EventoLineaDeTiempoVueloDTO.builder()
                     .idEvento("ARR-" + contadorEventos)
                     .tipoEvento("ARRIVAL")
