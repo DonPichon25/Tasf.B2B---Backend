@@ -96,7 +96,7 @@ public class DataImportService {
             }
             
             log.info("   Aeropuertos parseados: {}", aeropuertos.size());
-            
+
             // 2. Validar aeropuertos antes de guardar
             try {
                 EntityValidator.validateAeropuertos(aeropuertos);
@@ -109,28 +109,71 @@ public class DataImportService {
                 return result;
             }
             
-            // 3. Extraer ciudades únicas, validar y guardar en BD
-            Set<Ciudad> ciudadesUnicas = aeropuertos.stream()
-                .map(Aeropuerto::getCiudad)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-            
-            // Validar ciudades
+            // --- NUEVA LÓGICA: filtrar aeropuertos ya existentes por codigoIATA ---
+            log.info("   🔍 Verificando aeropuertos existentes en BD por codigo IATA...");
+            List<Aeropuerto> aeropuertosExistentes = aeropuertoService.listar();
+            Set<String> codigosExistentes = aeropuertosExistentes.stream()
+                    .map(Aeropuerto::getCodigoIATA)
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .map(String::toUpperCase)
+                    .collect(Collectors.toSet());
+
+            // separar nuevos y saltados
+            List<Aeropuerto> aeropuertosNuevos = aeropuertos.stream()
+                    .filter(a -> {
+                        String codigo = a.getCodigoIATA();
+                        if (codigo == null || codigo.trim().isEmpty()) return false; // ignorar sin código
+                        return !codigosExistentes.contains(codigo.trim().toUpperCase());
+                    })
+                    .collect(Collectors.toList());
+
+            List<String> saltados = aeropuertos.stream()
+                    .map(Aeropuerto::getCodigoIATA)
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .map(String::toUpperCase)
+                    .filter(c -> codigosExistentes.contains(c))
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            if (!saltados.isEmpty()) {
+                log.warn("   ⚠️ Se detectaron aeropuertos con IATA ya existente, serán saltados: {}", String.join(", ", saltados));
+            }
+
+            if (aeropuertosNuevos.isEmpty()) {
+                log.info("   ⚠️ No hay aeropuertos nuevos para insertar. Todos los códigos ya existen en BD.");
+                result.put("success", true);
+                result.put("message", "Aeropuertos ya existen en base de datos. No se insertaron duplicados.");
+                result.put("count", 0);
+                result.put("skipped", saltados);
+                return result;
+            }
+
+            log.info("   ✅ {} aeropuertos nuevos a insertar (de {} totales)", aeropuertosNuevos.size(), aeropuertos.size());
+
+            // 3. Extraer ciudades únicas SOLO de aeropuertos nuevos, validar y guardar en BD
+            Set<Ciudad> ciudadesUnicas = aeropuertosNuevos.stream()
+                    .map(Aeropuerto::getCiudad)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+
+            // Validar ciudades nuevas
             for (Ciudad ciudad : ciudadesUnicas) {
                 EntityValidator.validateCiudad(ciudad);
             }
-            
+
             List<Ciudad> ciudadesGuardadas = ciudadRepository.saveAll(new ArrayList<>(ciudadesUnicas));
-            log.info("   ✅ {} ciudades guardadas en BD", ciudadesGuardadas.size());
-            
-            // 4. Actualizar referencias de ciudad en aeropuertos con IDs reales de BD
+            log.info("   ✅ {} ciudades guardadas en BD (solo para aeropuertos nuevos)", ciudadesGuardadas.size());
+
+            // 4. Actualizar referencias de ciudad en los aeropuertos nuevos con IDs reales de BD
             Map<String, Ciudad> mapaCiudades = ciudadesGuardadas.stream()
-                .collect(Collectors.toMap(
-                    c -> c.getNombre() + "-" + c.getContinente(),
-                    c -> c
-                ));
-            
-            for (Aeropuerto aeropuerto : aeropuertos) {
+                    .collect(Collectors.toMap(
+                            c -> c.getNombre() + "-" + c.getContinente(),
+                            c -> c
+                    ));
+
+            for (Aeropuerto aeropuerto : aeropuertosNuevos) {
                 Ciudad ciudad = aeropuerto.getCiudad();
                 if (ciudad != null) {
                     String key = ciudad.getNombre() + "-" + ciudad.getContinente();
@@ -140,38 +183,10 @@ public class DataImportService {
                     }
                 }
             }
-            
-            // 5. Verificar si ya existen aeropuertos y filtrar duplicados
-//            log.info("   🔍 Verificando aeropuertos existentes...");
-//            List<Aeropuerto> aeropuertosExistentes = aeropuertoService.listar();
-//            Set<String> codigosExistentes = aeropuertosExistentes.stream()
-//                .map(Aeropuerto::getCodigoIATA)
-//                .collect(Collectors.toSet());
-//
-//            List<Aeropuerto> aeropuertosNuevos = aeropuertos.stream()
-//                .filter(a -> !codigosExistentes.contains(a.getCodigoIATA()))
-//                .collect(Collectors.toList());
-//
-//            if (aeropuertosNuevos.isEmpty()) {
-//                log.warn("   ⚠️ Todos los aeropuertos ya existen en BD. Saltando inserción.");
-//                log.info("   ℹ️ Si deseas re-importar, primero limpia la base de datos.");
-//
-//                // Retornar resultado exitoso sin insertar duplicados
-//                result.put("success", true);
-//                result.put("message", "Aeropuertos ya existen en base de datos. No se insertaron duplicados.");
-//                result.put("count", aeropuertosExistentes.size());
-//                result.put("cities", (int) ciudadesGuardadas.stream().count());
-//
-//                return result;
-//            }
-//
-//            log.info("   ✅ {} aeropuertos nuevos a insertar (de {} totales)",
-//                aeropuertosNuevos.size(), aeropuertos.size());
-//
-//            // 6. Extraer y guardar almacenes de aeropuertos nuevos
-//            // NOTA: LectorAeropuerto ya creó los almacenes con capacidades correctas
+
+            // 5. Preparar y guardar almacenes SOLO para aeropuertos nuevos
             List<com.grupo5e.morapack.core.model.Almacen> almacenes = new ArrayList<>();
-            for (Aeropuerto aeropuerto : aeropuertos) {
+            for (Aeropuerto aeropuerto : aeropuertosNuevos) {
                 Almacen almacen = aeropuerto.getAlmacen();
                 if (almacen != null) {
                     // Asegurarse de que el almacén no tiene ID (será generado por BD)
@@ -180,45 +195,45 @@ public class DataImportService {
                 } else {
                     // Fallback: crear almacén con capacidad por defecto si no existe
                     log.warn("   ⚠️ Aeropuerto {} no tiene almacén, creando con capacidad por defecto",
-                        aeropuerto.getCodigoIATA());
+                            aeropuerto.getCodigoIATA());
                     Almacen almacenNuevo = Almacen.builder()
-                        .nombre("Almacen " + aeropuerto.getCodigoIATA())
-                        .capacidadMaxima(1000)
-                        .capacidadUsada(0)
-                        .esAlmacenPrincipal(false)
-                        .build();
+                            .nombre("Almacen " + aeropuerto.getCodigoIATA())
+                            .capacidadMaxima(1000)
+                            .capacidadUsada(0)
+                            .esAlmacenPrincipal(false)
+                            .build();
                     almacenes.add(almacenNuevo);
                     aeropuerto.setAlmacen(almacenNuevo);
                 }
             }
-//
-//            // 7. Guardar almacenes en BD (esto les asigna IDs)
+
+            // 6. Guardar almacenes en BD (esto les asigna IDs)
             List<com.grupo5e.morapack.core.model.Almacen> almacenesGuardados = almacenRepository.saveAll(almacenes);
-            log.info("   ✅ {} almacenes guardados (con capacidades del archivo)", almacenesGuardados.size());
-//
-            // 8. Actualizar aeropuertos con referencias a almacenes guardados (con IDs)
-            for (int i = 0; i < aeropuertos.size(); i++) {
-                Aeropuerto aero = aeropuertos.get(i);
+            log.info("   ✅ {} almacenes guardados (solo para aeropuertos nuevos)", almacenesGuardados.size());
+
+            // 7. Actualizar aeropuertos nuevos con referencias a almacenes guardados (con IDs)
+            for (int i = 0; i < aeropuertosNuevos.size(); i++) {
+                Aeropuerto aero = aeropuertosNuevos.get(i);
                 com.grupo5e.morapack.core.model.Almacen alm = almacenesGuardados.get(i);
                 // Establecer relación bidireccional
                 aero.setAlmacen(alm);
                 alm.setAeropuerto(aero);
             }
-            
-            // 9. Guardar aeropuertos con almacenes asociados
-            //List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertosNuevos);
-            List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertos);
 
-            //10. Re-guardar almacenes para persistir la relación bidireccional
+            // 8. Guardar aeropuertos nuevos con almacenes asociados
+            List<Aeropuerto> aeropuertosGuardados = aeropuertoService.insertarBulk(aeropuertosNuevos);
+
+            // 9. Re-guardar almacenes para persistir la relación bidireccional
             almacenRepository.saveAll(almacenesGuardados);
-            
+
             result.put("success", true);
             result.put("message", "Aeropuertos y almacenes importados exitosamente");
             result.put("count", aeropuertosGuardados.size());
             result.put("cities", ciudadesGuardadas.size());
             result.put("almacenes", almacenesGuardados.size());
-            
-            log.info("✅ {} aeropuertos y {} almacenes importados con IDs: {}", 
+            result.put("skipped", saltados);
+
+            log.info("✅ {} aeropuertos y {} almacenes importados con IDs: {}",
                      aeropuertosGuardados.size(),
                     almacenesGuardados.size(),
                      aeropuertosGuardados.stream()
@@ -255,7 +270,7 @@ public class DataImportService {
             // 1. Verificar que existan aeropuertos en BD
             List<Aeropuerto> aeropuertos;
             //Si es que hay aeropuertos de tipoData 0 entonces filtrar con esos
-            List<Aeropuerto> aeropuertosArchivo = aeropuertoService.listartipoData(0);
+            List<Aeropuerto> aeropuertosArchivo = aeropuertoService.listartipoData(1);
             if(aeropuertosArchivo.isEmpty()){
                 log.info("   Archivo de aeropuertos no subido, usando todos los aeropuertos en BD");
                 aeropuertos = aeropuertoService.listartipoData(1);
@@ -303,21 +318,71 @@ public class DataImportService {
                 return result;
             }
             
+            // 4. FILTRAR vuelos que ya existen (por origen, destino, horaSalida y horaLlegada)
+            log.info("   🔍 Verificando vuelos existentes en BD para evitar duplicados (ORIGEN|DESTINO|H_SAL|H_LLEG)");
+            List<Vuelo> vuelosExistentes = vueloService.listar();
+            Set<String> clavesExistentes = vuelosExistentes.stream()
+                .map(v -> {
+                    String o = v.getAeropuertoOrigen() != null && v.getAeropuertoOrigen().getCodigoIATA() != null ? v.getAeropuertoOrigen().getCodigoIATA().trim().toUpperCase() : "";
+                    String d = v.getAeropuertoDestino() != null && v.getAeropuertoDestino().getCodigoIATA() != null ? v.getAeropuertoDestino().getCodigoIATA().trim().toUpperCase() : "";
+                    String hs = v.getHoraSalida() != null ? String.format("%02d:%02d", v.getHoraSalida().getHour(), v.getHoraSalida().getMinute()) : "";
+                    String hl = v.getHoraLlegada() != null ? String.format("%02d:%02d", v.getHoraLlegada().getHour(), v.getHoraLlegada().getMinute()) : "";
+                    return String.join("|", Arrays.asList(o, d, hs, hl));
+                })
+                .collect(Collectors.toSet());
+
+            List<Vuelo> vuelosNuevos = vuelos.stream()
+                .filter(v -> {
+                    String o = v.getAeropuertoOrigen() != null && v.getAeropuertoOrigen().getCodigoIATA() != null ? v.getAeropuertoOrigen().getCodigoIATA().trim().toUpperCase() : "";
+                    String d = v.getAeropuertoDestino() != null && v.getAeropuertoDestino().getCodigoIATA() != null ? v.getAeropuertoDestino().getCodigoIATA().trim().toUpperCase() : "";
+                    String hs = v.getHoraSalida() != null ? String.format("%02d:%02d", v.getHoraSalida().getHour(), v.getHoraSalida().getMinute()) : "";
+                    String hl = v.getHoraLlegada() != null ? String.format("%02d:%02d", v.getHoraLlegada().getHour(), v.getHoraLlegada().getMinute()) : "";
+                    String clave = String.join("|", Arrays.asList(o, d, hs, hl));
+                    return !clavesExistentes.contains(clave) && !o.isEmpty() && !d.isEmpty();
+                })
+                .collect(Collectors.toList());
+
+            List<String> vuelosSaltados = vuelos.stream()
+                .map(v -> {
+                    String o = v.getAeropuertoOrigen() != null && v.getAeropuertoOrigen().getCodigoIATA() != null ? v.getAeropuertoOrigen().getCodigoIATA().trim().toUpperCase() : "";
+                    String d = v.getAeropuertoDestino() != null && v.getAeropuertoDestino().getCodigoIATA() != null ? v.getAeropuertoDestino().getCodigoIATA().trim().toUpperCase() : "";
+                    String hs = v.getHoraSalida() != null ? String.format("%02d:%02d", v.getHoraSalida().getHour(), v.getHoraSalida().getMinute()) : "";
+                    String hl = v.getHoraLlegada() != null ? String.format("%02d:%02d", v.getHoraLlegada().getHour(), v.getHoraLlegada().getMinute()) : "";
+                    return String.join("|", Arrays.asList(o, d, hs, hl));
+                })
+                .filter(cl -> clavesExistentes.contains(cl))
+                .distinct()
+                .collect(Collectors.toList());
+
+            if (!vuelosSaltados.isEmpty()) {
+                log.warn("   ⚠️ Se detectaron vuelos duplicados y se saltarán: {}", String.join(", ", vuelosSaltados));
+            }
+
+            if (vuelosNuevos.isEmpty()) {
+                log.info("   ⚠️ No hay vuelos nuevos para insertar. Todos los vuelos del archivo ya existen en BD.");
+                result.put("success", true);
+                result.put("message", "Vuelos ya existen en base de datos. No se insertaron duplicados.");
+                result.put("count", 0);
+                result.put("skipped", vuelosSaltados);
+                return result;
+            }
+
             // 5. OPTIMIZADO: Validar tiempos PACK en paralelo (solo informativo, no bloquea)
-            long vuelosPACKCompliant = vuelos.parallelStream()
+            long vuelosPACKCompliant = vuelosNuevos.parallelStream()
                 .filter(PACKTimeValidator::validateFullPACKCompliance)
                 .count();
             log.info("   📊 {} de {} vuelos cumplen estándares PACK ({}%)", 
-                vuelosPACKCompliant, vuelos.size(), 
-                vuelos.size() > 0 ? (vuelosPACKCompliant * 100 / vuelos.size()) : 0);
-            
-            // 4. OPTIMIZADO: Guardar vuelos en BD con batch real
-            int vuelosInsertados = batchService.insertarVuelosEnBatch(vuelos);
-            
+                vuelosPACKCompliant, vuelosNuevos.size(),
+                vuelosNuevos.size() > 0 ? (vuelosPACKCompliant * 100 / vuelosNuevos.size()) : 0);
+
+            // 6. Guardar vuelos nuevos en BD con batch real
+            int vuelosInsertados = batchService.insertarVuelosEnBatch(vuelosNuevos);
+
             result.put("success", true);
             result.put("message", "Vuelos importados exitosamente");
             result.put("count", vuelosInsertados);
-            
+            result.put("skipped", vuelosSaltados);
+
             log.info("✅ {} vuelos importados exitosamente", vuelosInsertados);
             
         } catch (Exception e) {
@@ -531,7 +596,7 @@ public class DataImportService {
                 
                 log.info("✅ {} pedidos importados (V2)", resultadoCarga.pedidosCreados);
                 log.info("   📊 Cargados: {}, Filtrados: {}, Errores: {}", 
-                    resultadoCarga.pedidosCargados, 
+                    resultadoCarga.pedidosCreados,
                     resultadoCarga.pedidosFiltrados,
                     resultadoCarga.erroresParseo);
                 
