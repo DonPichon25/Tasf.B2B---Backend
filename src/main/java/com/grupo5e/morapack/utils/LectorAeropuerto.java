@@ -156,7 +156,7 @@ public class LectorAeropuerto {
                         ciudad.setNombre(nombreCiudad);
                         ciudad.setPais(nombrePais);  // País (ej: "Ecuador", "Perú")
                         ciudad.setContinente(continenteActual);
-                        ciudad.setTipoData(0);
+                        ciudad.setTipoData(1);
                         mapaCiudades.put(claveCiudad, ciudad);
                     }
                     
@@ -167,7 +167,7 @@ public class LectorAeropuerto {
                     almacen.setCapacidadUsada(0);
                     almacen.setNombre(nombreCiudad + " Almacén");
                     almacen.setEsAlmacenPrincipal(false);
-                    almacen.setTipoData(0);
+                    almacen.setTipoData(1);
                     
                     // Crear objeto Aeropuerto
                     Aeropuerto aeropuerto = new Aeropuerto();
@@ -181,7 +181,7 @@ public class LectorAeropuerto {
                     
                     // Establecer referencia circular
                     almacen.setAeropuerto(aeropuerto);
-                    aeropuerto.setTipoData(0);
+                    aeropuerto.setTipoData(1);
                     aeropuertos.add(aeropuerto);
                 }
             }
