@@ -10,14 +10,10 @@ import com.grupo5e.morapack.core.service.ServicioDisponibilidadVuelos;
 import com.grupo5e.morapack.core.index.IndiceVuelos;
 import com.grupo5e.morapack.core.index.CacheDisponibilidad;
 import com.grupo5e.morapack.core.index.CacheRutas;
-import com.grupo5e.morapack.utils.LectorCancelaciones;
 
 import java.util.*;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.stream.Collectors;
-import java.util.PriorityQueue;
-import java.util.Comparator;
 
 /**
  * ALNSSolver adaptado desde el Solution que proporcionaste.
@@ -80,7 +76,6 @@ public class ALNSSolver {
     // Diversificación extrema / restart
     private int iteracionesDesdeMejoraSignificativa;
     private int contadorRestarts;
-    private double ultimoPesoSignificativo;
 
     // Servicio de disponibilidad de vuelos (cancelaciones)
     private ServicioDisponibilidadVuelos servicioDisponibilidad;
@@ -90,11 +85,8 @@ public class ALNSSolver {
     private CacheDisponibilidad cacheDisponibilidad;
     private CacheRutas cacheRutas;
 
-    // CRÍTICO: RouteValidator para validación optimizada (Backend pattern)
-    private RouteValidator routeValidator;
-
-    // Horizon days
-    private static final int HORIZON_DAYS = 4;
+    // Horizonte dinamico (calculado segun deadlines de pedidos)
+    private int horizonteDias;
     private static final boolean DEBUG_MODE = false;
 
     /**
@@ -104,7 +96,7 @@ public class ALNSSolver {
      * @param maxIteraciones Número máximo de iteraciones ALNS
      */
     public ALNSSolver(int maxIteraciones) {
-        this(maxIteraciones, null, null,1);
+        this(maxIteraciones, null, null, 1);
     }
 
     /**
@@ -116,7 +108,7 @@ public class ALNSSolver {
      * @param horaInicio     Hora de inicio de la ventana de simulación (opcional)
      * @param horaFin        Hora de fin de la ventana de simulación (opcional)
      */
-    public ALNSSolver(int maxIteraciones, LocalDateTime horaInicio, LocalDateTime horaFin,int tipoData) {
+    public ALNSSolver(int maxIteraciones, LocalDateTime horaInicio, LocalDateTime horaFin, int tipoData) {
         System.out.println("========================================");
         System.out.println("INICIALIZANDO ALNS SOLVER");
         if (horaInicio != null && horaFin != null) {
@@ -143,8 +135,7 @@ public class ALNSSolver {
         // CRÍTICO: Cargar pedidos con filtrado de tiempo si se especifica
         if (horaInicio != null && horaFin != null) {
             this.pedidosOriginales = new ArrayList<>(
-                fuenteDatos.cargarPedidosPorVentanaDeTiempo(this.aeropuertos, horaInicio, horaFin, tipoData)
-            );
+                    fuenteDatos.cargarPedidosPorVentanaDeTiempo(this.aeropuertos, horaInicio, horaFin, tipoData));
         } else {
             this.pedidosOriginales = new ArrayList<>(fuenteDatos.cargarPedidos(this.aeropuertos));
         }
@@ -192,45 +183,52 @@ public class ALNSSolver {
         this.ocupacionTemporalAlmacenes = new HashMap<>();
 
         // 6. Inicializar caches y estructuras
-        //asignarAeropuertosOrigen();
+        // asignarAeropuertosOrigen();
         inicializarCacheCiudadAeropuerto();
-        construirCacheAeropuertos(); // OPTIMIZACIÓN: Cache IATA→Aeropuerto
+        construirCacheAeropuertos();
         inicializarT0();
-        
-        // 6.5. NUEVO: Cargar asignaciones existentes si estamos en modo ventana de tiempo (PREFILL)
-//        if (horaInicio != null && horaFin != null) {
-//            System.out.println("\n=== CARGANDO ESTADO EXISTENTE DE BD (PREFILL) ===");
-//            try {
-//                // Verificar si la fuente de datos soporta cargar asignaciones existentes
-//                if (fuenteDatos instanceof com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) {
-//                    com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos fuenteBD =
-//                        (com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) fuenteDatos;
-//
-//                    Map<String, List<Producto>> asignacionesExistentes =
-//                        fuenteBD.cargarAsignacionesExistentes(horaInicio, horaFin);
-//
-//                    if (asignacionesExistentes != null && !asignacionesExistentes.isEmpty()) {
-//                        // Inicializar capacidades de vuelos desde BD
-//                        inicializarCapacidadesVuelosDesdeDB(asignacionesExistentes);
-//
-//                        // Inicializar ocupación de almacenes desde BD
-//                        inicializarOcupacionAlmacenesDesdeDB(asignacionesExistentes);
-//
-//                        System.out.println("✓ Estado de BD cargado - algoritmo trabajará sobre asignaciones existentes");
-//                    } else {
-//                        System.out.println("✓ No hay asignaciones previas - ejecución desde cero");
-//                    }
-//                } else {
-//                    System.out.println("✓ Fuente de datos no soporta prefill - ejecución desde cero");
-//                }
-//            } catch (Exception e) {
-//                System.err.println("⚠ ADVERTENCIA: Error cargando estado de BD: " + e.getMessage());
-//                System.err.println("⚠ Continuando con ejecución desde cero");
-//                e.printStackTrace();
-//            }
-//            System.out.println("=============================================================\n");
-//        }
-        
+        this.horizonteDias = calcularHorizonteDinamico();
+        System.out.println("Horizonte dinamico calculado: " + this.horizonteDias + " dias");
+
+        // 6.5. Cargar asignaciones existentes si estamos en modo ventana de tiempo
+        // (PREFILL)
+        // if (horaInicio != null && horaFin != null) {
+        // System.out.println("\n=== CARGANDO ESTADO EXISTENTE DE BD (PREFILL) ===");
+        // try {
+        // // Verificar si la fuente de datos soporta cargar asignaciones existentes
+        // if (fuenteDatos instanceof
+        // com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) {
+        // com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos fuenteBD =
+        // (com.grupo5e.morapack.algorithm.input.FuenteDatosBaseDatos) fuenteDatos;
+        //
+        // Map<String, List<Producto>> asignacionesExistentes =
+        // fuenteBD.cargarAsignacionesExistentes(horaInicio, horaFin);
+        //
+        // if (asignacionesExistentes != null && !asignacionesExistentes.isEmpty()) {
+        // // Inicializar capacidades de vuelos desde BD
+        // inicializarCapacidadesVuelosDesdeDB(asignacionesExistentes);
+        //
+        // // Inicializar ocupación de almacenes desde BD
+        // inicializarOcupacionAlmacenesDesdeDB(asignacionesExistentes);
+        //
+        // System.out.println("✓ Estado de BD cargado - algoritmo trabajará sobre
+        // asignaciones existentes");
+        // } else {
+        // System.out.println("✓ No hay asignaciones previas - ejecución desde cero");
+        // }
+        // } else {
+        // System.out.println("✓ Fuente de datos no soporta prefill - ejecución desde
+        // cero");
+        // }
+        // } catch (Exception e) {
+        // System.err.println("⚠ ADVERTENCIA: Error cargando estado de BD: " +
+        // e.getMessage());
+        // System.err.println("⚠ Continuando con ejecución desde cero");
+        // e.printStackTrace();
+        // }
+        // System.out.println("=============================================================\n");
+        // }
+
         // 7. RNG y operadores
         this.aleatorio = new Random(System.currentTimeMillis());
         this.operadoresDestruccion = new ALNSDestruction(this.aeropuertos);
@@ -254,10 +252,6 @@ public class ALNSSolver {
         if (cacheDisponibilidad != null) {
             cacheDisponibilidad.precalcularDias(7, cacheCodigoIATAAeropuerto);
         }
-
-        // 11. Inicializar RouteValidator (CRÍTICO - patrón Backend)
-        System.out.println("Inicializando RouteValidator (optimización O(1))...");
-        this.routeValidator = new RouteValidator(this.aeropuertos, this.vuelos);
 
         System.out.println("ALNS Solver inicializado correctamente");
         System.out.println("Iteraciones configuradas: " + this.maxIteraciones);
@@ -341,7 +335,6 @@ public class ALNSSolver {
 
         this.iteracionesDesdeMejoraSignificativa = 0;
         this.contadorRestarts = 0;
-        this.ultimoPesoSignificativo = 0.0;
     }
 
     /**
@@ -425,13 +418,8 @@ public class ALNSSolver {
 
         long minutosDesdeT0 = ChronoUnit.MINUTES.between(T0, pedido.getFechaPedido());
 
-        // Convertir minutos a días (1-based)
         int dia = (int) (minutosDesdeT0 / (24 * 60)) + 1;
-
-        // Clamp al rango válido [1, HORIZON_DAYS * 30]
-        // Asumiendo horizonte de planificación de 30 días por defecto
-        int maxDias = HORIZON_DAYS * 30;
-        dia = Math.max(1, Math.min(dia, maxDias));
+        dia = Math.max(1, Math.min(dia, horizonteDias));
 
         return dia;
     }
@@ -595,9 +583,7 @@ public class ALNSSolver {
 
         System.out.println("Peso de solución inicial: " + pesoActual);
 
-        ultimoPesoSignificativo = pesoActual;
         iteracionesDesdeMejoraSignificativa = 0;
-
         int mejorPeso = pesoActual;
         int mejoras = 0;
         int conteoSinMejoras = 0;
@@ -709,7 +695,6 @@ public class ALNSSolver {
 
                     if (ratioMejora >= (Constantes.UMBRAL_MEJORA_SIGNIFICATIVA / 100.0)) {
                         iteracionesDesdeMejoraSignificativa = 0;
-                        ultimoPesoSignificativo = mejorPeso;
                     } else {
                         iteracionesDesdeMejoraSignificativa++;
                     }
@@ -1203,7 +1188,7 @@ public class ALNSSolver {
         for (Vuelo v : ruta)
             total += v.getTiempoTransporte();
         if (ruta.size() > 1)
-            total += (ruta.size() - 1) * 2.0;
+            total += (ruta.size() - 1) * (Constantes.TIEMPO_CONEXION_MINUTOS / 60.0);
 
         score += Math.max(0, 2000 - (int) (total * 10));
 
@@ -1524,12 +1509,25 @@ public class ALNSSolver {
         System.out.println("T0 inicializado (fallback): " + T0);
     }
 
-    /**
-     * Obtiene el valor de T0 (ancla temporal del algoritmo).
-     * Útil para debugging y verificación de sincronización.
-     * 
-     * @return LocalDateTime con el valor de T0
-     */
+    private int calcularHorizonteDinamico() {
+        if (pedidos == null || pedidos.isEmpty() || T0 == null) {
+            return Constantes.HORIZON_DAYS_MIN;
+        }
+
+        LocalDateTime maxDeadline = pedidos.stream()
+                .filter(p -> p.getFechaLimiteEntrega() != null)
+                .map(Pedido::getFechaLimiteEntrega)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+
+        if (maxDeadline == null) {
+            return Constantes.HORIZON_DAYS_MIN;
+        }
+
+        long dias = ChronoUnit.DAYS.between(T0, maxDeadline) + 1;
+        return (int) Math.max(Constantes.HORIZON_DAYS_MIN, Math.min(dias, Constantes.HORIZON_DAYS_MAX));
+    }
+
     public LocalDateTime getT0() {
         return this.T0;
     }
@@ -1654,31 +1652,24 @@ public class ALNSSolver {
         }
 
         int productosRastreados = 0;
-        int productosConTiempos = 0;
 
-        // Recorrer la MEJOR solución encontrada
         for (Map.Entry<Pedido, ArrayList<Vuelo>> entry : solucionActual.entrySet()) {
             Pedido pedido = entry.getKey();
             ArrayList<Vuelo> ruta = entry.getValue();
-
-            // NUEVO: Calcular tiempos absolutos para esta ruta
             RutaConTiempos rutaConTiempos = calcularTiemposRuta(pedido, ruta);
 
-            // Asignar TODOS los productos de este pedido a su ruta CON TIEMPOS
             List<Producto> productos = pedido.getProductos();
             if (productos != null && !productos.isEmpty()) {
                 for (Producto producto : productos) {
                     if (producto != null && producto.getId() != null) {
-                        // Usar el nuevo método que incluye tiempos
                         productTracker.assignProductToRouteWithTimes(producto, rutaConTiempos);
                         productosRastreados++;
-                        productosConTiempos++;
                     }
                 }
             }
         }
 
-        System.out.println("✓ Productos rastreados: " + productosRastreados);
+        System.out.println("Productos rastreados: " + productosRastreados);
     }
 
     private List<Pedido> expandirPaquetesAUnidadesProducto(List<Pedido> pedidosOriginales) {
@@ -1793,23 +1784,21 @@ public class ALNSSolver {
         if (aeropuertoDestino == null)
             return false;
 
-        // OPTIMIZADO: Usar getCantidadProductosRapido()
         int conteoProductos = pedido.getCantidadProductosRapido();
         int ocupacionActual = aeropuertoDestino.getCapacidadActual();
         int capacidadMaxima = aeropuertoDestino.getCapacidadMaxima();
 
-        return (ocupacionActual + conteoProductos) <= capacidadMaxima;
+        if ((ocupacionActual + conteoProductos) > capacidadMaxima) {
+            return false;
+        }
+
+        return simularFlujoPaqueteTemporal(pedido, ruta);
     }
 
     private void actualizarCapacidadesVuelos(ArrayList<Vuelo> ruta, int conteoProductos) {
         for (Vuelo vuelo : ruta) {
             vuelo.setCapacidadUsada(vuelo.getCapacidadUsada() + conteoProductos);
         }
-    }
-
-    private void incrementarOcupacionAlmacen(Aeropuerto aeropuerto, int conteoProductos) {
-        int ocupacionActual = ocupacionAlmacenes.getOrDefault(aeropuerto, 0);
-        ocupacionAlmacenes.put(aeropuerto, ocupacionActual + conteoProductos);
     }
 
     private int obtenerTiempoInicioPaquete(Pedido pedido) {
@@ -1819,7 +1808,7 @@ public class ALNSSolver {
         long minutosDesdeT0 = ChronoUnit.MINUTES.between(T0, pedido.getFechaPedido());
         int offset = Math.floorMod(pedido.getId(), 60);
         int minutoInicio = (int) (minutosDesdeT0 + offset);
-        final int TOTAL_MINUTOS = HORIZON_DAYS * 24 * 60;
+        final int TOTAL_MINUTOS = horizonteDias * 24 * 60;
         return Math.max(0, Math.min(minutoInicio, TOTAL_MINUTOS - 1));
     }
 
@@ -1833,7 +1822,7 @@ public class ALNSSolver {
         for (Vuelo vuelo : ruta)
             tiempoTotal += vuelo.getTiempoTransporte();
         if (ruta.size() > 1)
-            tiempoTotal += (ruta.size() - 1) * 2.0;
+            tiempoTotal += (ruta.size() - 1) * (Constantes.TIEMPO_CONEXION_MINUTOS / 60.0);
 
         long horasDisponibles = ChronoUnit.HOURS.between(pedido.getFechaPedido(), pedido.getFechaLimiteEntrega());
         double margen = horasDisponibles - tiempoTotal;
@@ -2156,15 +2145,6 @@ public class ALNSSolver {
         }
 
         return null; // No hay rutas disponibles en este día
-    }
-
-    private ArrayList<Vuelo> encontrarMejorRutaConVentanasTiempo(Pedido pedido,
-            HashMap<Pedido, ArrayList<Vuelo>> solucionActual) {
-        ArrayList<Vuelo> rutaOriginal = encontrarMejorRuta(pedido);
-        if (rutaOriginal == null || !puedeAsignarConOptimizacionEspacio(pedido, rutaOriginal, solucionActual)) {
-            return encontrarRutaConSalidaRetrasada(pedido, solucionActual);
-        }
-        return rutaOriginal;
     }
 
     private ArrayList<Vuelo> encontrarRutaConSalidaRetrasada(Pedido pedido,
@@ -2657,7 +2637,7 @@ public class ALNSSolver {
         for (Vuelo v : ruta)
             tiempoTotal += v.getTiempoTransporte();
         if (ruta.size() > 1)
-            tiempoTotal += (ruta.size() - 1) * 2.0;
+            tiempoTotal += (ruta.size() - 1) * (Constantes.TIEMPO_CONEXION_MINUTOS / 60.0);
 
         if (!validarPromesaEntregaMoraPack(pedido, tiempoTotal))
             return false;
@@ -2759,7 +2739,7 @@ public class ALNSSolver {
             }
 
             if (ruta.size() > 1)
-                tiempoRuta += (ruta.size() - 1) * 2.0;
+                tiempoRuta += (ruta.size() - 1) * (Constantes.TIEMPO_CONEXION_MINUTOS / 60.0);
 
             tiempoTotalEntrega += tiempoRuta;
 
@@ -3158,7 +3138,7 @@ public class ALNSSolver {
             }
 
             if (ruta.size() > 1)
-                tiempoTotal += (ruta.size() - 1) * 2.0;
+                tiempoTotal += (ruta.size() - 1) * (Constantes.TIEMPO_CONEXION_MINUTOS / 60.0);
 
             System.out.println("  Tiempo total estimado: " + String.format("%.1f", tiempoTotal) + "h");
 
@@ -3188,7 +3168,7 @@ public class ALNSSolver {
     }
 
     private void inicializarOcupacionTemporalAlmacenes() {
-        final int TOTAL_MINUTOS = HORIZON_DAYS * 24 * 60;
+        final int TOTAL_MINUTOS = horizonteDias * 24 * 60;
         for (Aeropuerto aeropuerto : aeropuertos) {
             ocupacionTemporalAlmacenes.put(aeropuerto, new int[TOTAL_MINUTOS]);
         }
@@ -3209,7 +3189,6 @@ public class ALNSSolver {
     private boolean simularFlujoPaquete(Pedido pedido, ArrayList<Vuelo> ruta) {
         if (ruta == null || ruta.isEmpty()) {
             Aeropuerto destino = obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo());
-            // OPTIMIZADO: Usar getCantidadProductosRapido()
             int conteoProductos = pedido.getCantidadProductosRapido();
             int inicio = obtenerTiempoInicioPaquete(pedido);
             return agregarOcupacionTemporal(destino, inicio, Constantes.HORAS_MAX_RECOGIDA_CLIENTE * 60,
@@ -3217,43 +3196,87 @@ public class ALNSSolver {
         }
 
         int minutoActual = obtenerTiempoInicioPaquete(pedido);
-        // OPTIMIZADO: Usar getCantidadProductosRapido()
         int conteoProductos = pedido.getCantidadProductosRapido();
 
         for (int i = 0; i < ruta.size(); i++) {
             Vuelo vuelo = ruta.get(i);
-            Aeropuerto salida = vuelo.getAeropuertoOrigen();
             Aeropuerto llegada = vuelo.getAeropuertoDestino();
 
-            int tiempoEspera = 120;
-            if (!agregarOcupacionTemporal(salida, minutoActual, tiempoEspera, conteoProductos)) {
-                System.out.println("Violación de capacidad en " + salida.getCiudad().getNombre() +
-                        " en minuto " + minutoActual + " (fase de espera) para pedido " + pedido.getId());
-                return false;
-            }
-
-            int inicioVuelo = minutoActual + tiempoEspera;
             int duracionVuelo = (int) (vuelo.getTiempoTransporte() * 60);
-            int minutoLlegada = inicioVuelo + duracionVuelo;
+            int minutoLlegada = minutoActual + duracionVuelo;
 
             int duracionEstancia;
             if (i < ruta.size() - 1)
-                duracionEstancia = 120;
+                duracionEstancia = Constantes.TIEMPO_CONEXION_MINUTOS;
             else
                 duracionEstancia = Constantes.HORAS_MAX_RECOGIDA_CLIENTE * 60;
 
-            if (duracionEstancia > 0
-                    && !agregarOcupacionTemporal(llegada, minutoLlegada, duracionEstancia, conteoProductos)) {
-                System.out.println("Violación de capacidad en " + llegada.getCiudad().getNombre() +
-                        " en minuto " + minutoLlegada + " (fase de llegada) para pedido " + pedido.getId());
+            if (!agregarOcupacionTemporal(llegada, minutoLlegada, duracionEstancia, conteoProductos)) {
+                if (Constantes.LOGGING_VERBOSO) {
+                    System.out.println("Violacion de capacidad en " + llegada.getCiudad().getNombre() +
+                            " en minuto " + minutoLlegada + " para pedido " + pedido.getId());
+                }
                 return false;
             }
 
-            minutoActual = minutoLlegada;
-            if (i < ruta.size() - 1)
-                minutoActual += 120;
+            minutoActual = minutoLlegada + duracionEstancia;
         }
 
+        return true;
+    }
+
+    private boolean simularFlujoPaqueteTemporal(Pedido pedido, ArrayList<Vuelo> ruta) {
+        if (ruta == null || ruta.isEmpty()) {
+            Aeropuerto destino = obtenerAeropuerto(pedido.getAeropuertoDestinoCodigo());
+            int conteoProductos = pedido.getCantidadProductosRapido();
+            int inicio = obtenerTiempoInicioPaquete(pedido);
+            return verificarOcupacionTemporal(destino, inicio, Constantes.HORAS_MAX_RECOGIDA_CLIENTE * 60,
+                    conteoProductos);
+        }
+
+        int minutoActual = obtenerTiempoInicioPaquete(pedido);
+        int conteoProductos = pedido.getCantidadProductosRapido();
+
+        for (int i = 0; i < ruta.size(); i++) {
+            Vuelo vuelo = ruta.get(i);
+            Aeropuerto llegada = vuelo.getAeropuertoDestino();
+
+            int duracionVuelo = (int) (vuelo.getTiempoTransporte() * 60);
+            int minutoLlegada = minutoActual + duracionVuelo;
+
+            int duracionEstancia;
+            if (i < ruta.size() - 1)
+                duracionEstancia = Constantes.TIEMPO_CONEXION_MINUTOS;
+            else
+                duracionEstancia = Constantes.HORAS_MAX_RECOGIDA_CLIENTE * 60;
+
+            if (!verificarOcupacionTemporal(llegada, minutoLlegada, duracionEstancia, conteoProductos)) {
+                return false;
+            }
+
+            minutoActual = minutoLlegada + duracionEstancia;
+        }
+
+        return true;
+    }
+
+    private boolean verificarOcupacionTemporal(Aeropuerto aeropuerto, int minutoInicio, int duracionMinutos,
+            int conteoProductos) {
+        if (aeropuerto == null)
+            return false;
+        int[] array = ocupacionTemporalAlmacenes.get(aeropuerto);
+        if (array == null)
+            return false;
+        int capacidadMaxima = aeropuerto.getCapacidadMaxima();
+        final int TOTAL_MINUTOS = horizonteDias * 24 * 60;
+        int inicioClamp = Math.max(0, Math.min(minutoInicio, TOTAL_MINUTOS - 1));
+        int finClamp = Math.max(0, Math.min(minutoInicio + duracionMinutos, TOTAL_MINUTOS));
+
+        for (int m = inicioClamp; m < finClamp; m++) {
+            if (array[m] + conteoProductos > capacidadMaxima) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -3262,23 +3285,32 @@ public class ALNSSolver {
         if (aeropuerto == null)
             return false;
         int[] array = ocupacionTemporalAlmacenes.get(aeropuerto);
+        if (array == null)
+            return false;
         int capacidadMaxima = aeropuerto.getCapacidadMaxima();
-        final int TOTAL_MINUTOS = HORIZON_DAYS * 24 * 60;
+        final int TOTAL_MINUTOS = horizonteDias * 24 * 60;
         int inicioClamp = Math.max(0, Math.min(minutoInicio, TOTAL_MINUTOS - 1));
         int finClamp = Math.max(0, Math.min(minutoInicio + duracionMinutos, TOTAL_MINUTOS));
+
+        for (int m = inicioClamp; m < finClamp; m++) {
+            if (array[m] + conteoProductos > capacidadMaxima) {
+                return false;
+            }
+        }
+
         for (int m = inicioClamp; m < finClamp; m++) {
             array[m] += conteoProductos;
-            if (array[m] > capacidadMaxima)
-                return false;
         }
         return true;
     }
 
     private int[] findPeakOccupancy(Aeropuerto aeropuerto) {
         int[] array = ocupacionTemporalAlmacenes.get(aeropuerto);
+        if (array == null)
+            return new int[] { 0, 0 };
         int max = 0;
         int minuto = 0;
-        final int TOTAL_MINUTOS = HORIZON_DAYS * 24 * 60;
+        final int TOTAL_MINUTOS = horizonteDias * 24 * 60;
         for (int m = 0; m < TOTAL_MINUTOS; m++) {
             if (array[m] > max) {
                 max = array[m];
@@ -3299,14 +3331,7 @@ public class ALNSSolver {
             return null;
         }
 
-        // OPTIMIZACIÓN: Lookup O(1) desde cache
-        Aeropuerto aeropuerto = cacheCodigoIATAAeropuerto.get(codigoIATA.trim().toUpperCase());
-
-        if (aeropuerto == null && Constantes.LOGGING_VERBOSO) {
-            System.err.println("❌ No se encontró aeropuerto con código IATA: '" + codigoIATA + "'");
-        }
-
-        return aeropuerto;
+        return cacheCodigoIATAAeropuerto.get(codigoIATA.trim().toUpperCase());
     }
 
     // ==================== GETTERS PÚBLICOS PARA ACCEDER A LA SOLUCIÓN
@@ -3376,45 +3401,6 @@ public class ALNSSolver {
         return noAsignados;
     }
 
-    // METODO PARA AGREGAR AEROPUERTOS ORIGEN
-    private void asignarAeropuertosOrigen() {
-        for (Pedido pedido : pedidos) {
-            pedido.setAeropuertoOrigenCodigo(colocarAeropuertoPrincipalAleatorio(pedido.getAeropuertoDestinoCodigo()));
-        }
-        // // A) Completar en pedidosOriginales
-        // for (Pedido p : pedidosOriginales) {
-        // if (p.getAeropuertoOrigenCodigo() == null ||
-        // p.getAeropuertoOrigenCodigo().isBlank()) {
-        // p.setAeropuertoOrigenCodigo(colocarAeropuertoPrincipalAleatorio(p.getAeropuertoDestinoCodigo()));
-        // }
-        // }
-        // // B) Completar en pedidos (las unidades creadas en DataLoader)
-        // for (Pedido p : pedidos) {
-        // if (p.getAeropuertoOrigenCodigo() == null ||
-        // p.getAeropuertoOrigenCodigo().isBlank()) {
-        // p.setAeropuertoOrigenCodigo(colocarAeropuertoPrincipalAleatorio(p.getAeropuertoDestinoCodigo()));
-        // }
-        // }
-    }
-
-    // Método auxiliar para encontrar aeropuerto por defecto
-    private String colocarAeropuertoPrincipalAleatorio(String codigoDestino) {
-        // Lista de códigos IATA de los aeropuertos principales de MoraPack
-        String[] aeropuertosPrincipales = { "SPIM", "UBBB", "EBCI" };
-        ArrayList<String> aeropuertos = new ArrayList<>();
-
-        Random random = new Random();
-        for (int i = 0; i < 3; i++) {
-            if (Objects.equals(codigoDestino, aeropuertosPrincipales[i]))
-                continue;
-            aeropuertos.add(aeropuertosPrincipales[i]);
-        }
-        int indiceAleatorio = random.nextInt(aeropuertos.size());
-        String codigoIATAOrigen = aeropuertos.get(indiceAleatorio);
-        // System.out.println("🔀 Usando aeropuerto por defecto: " + codigoIATAOrigen);
-        return codigoIATAOrigen;
-    }
-
     /**
      * Obtiene la solución a nivel de producto.
      * Convierte la solución interna (Pedido -> Rutas) a formato producto-level.
@@ -3452,180 +3438,9 @@ public class ALNSSolver {
 
         return solucionProductos;
     }
-    
-    /**
-     * Inicializa capacidades de vuelos desde asignaciones existentes en BD.
-     * Actualiza capacidadUsada de cada vuelo basándose en productos ya asignados.
-     * 
-     * CRÍTICO: Permite que el algoritmo construya sobre asignaciones previas en lugar
-     * de empezar desde cero en cada ventana de tiempo.
-     * 
-     * @param asignacionesExistentes Mapa de instancia de vuelo -> lista de productos
-     */
-    private void inicializarCapacidadesVuelosDesdeDB(
-            Map<String, List<Producto>> asignacionesExistentes) {
-        
-        System.out.println("\n--- Inicializando Capacidades de Vuelos desde BD ---");
-        
-        int vuelosActualizados = 0;
-        int totalProductosCargados = 0;
-        Map<String, Integer> productosporVuelo = new HashMap<>();
-        
-        for (Map.Entry<String, List<Producto>> entrada : asignacionesExistentes.entrySet()) {
-            String idInstancia = entrada.getKey();
-            List<Producto> productos = entrada.getValue();
-            
-            // Parsear ID de instancia: "FL-{vueloId}-DAY-{day}-{HHmm}"
-            Integer vueloId = parsearVueloIdDesdeInstancia(idInstancia);
-            if (vueloId == null) {
-                System.out.println("⚠ No se pudo parsear vueloId de instancia: " + idInstancia);
-                continue;
-            }
-            
-            // Encontrar vuelo correspondiente
-            Vuelo vuelo = buscarVueloPorId(vueloId);
-            if (vuelo == null) {
-                System.out.println("⚠ Vuelo ID " + vueloId + " no encontrado en lista de vuelos cargados");
-                continue;
-            }
-            
-            // Actualizar capacidad usada
-            int productosEnInstancia = productos.size();
-            vuelo.setCapacidadUsada(vuelo.getCapacidadUsada() + productosEnInstancia);
-            totalProductosCargados += productosEnInstancia;
-            vuelosActualizados++;
-            
-            // Tracking para log
-            String identificador = vuelo.getIdentificadorVuelo();
-            if (identificador != null) {
-                productosporVuelo.merge(identificador, productosEnInstancia, Integer::sum);
-            }
-        }
-        
-        System.out.println("✓ Capacidades de vuelos inicializadas:");
-        System.out.println("  - Vuelos actualizados: " + vuelosActualizados);
-        System.out.println("  - Total productos pre-asignados: " + totalProductosCargados);
-        
-        // Mostrar ejemplos
-        if (!productosporVuelo.isEmpty()) {
-            System.out.println("\nEjemplos de vuelos con capacidad pre-usada:");
-            productosporVuelo.entrySet().stream()
-                .limit(5)
-                .forEach(e -> System.out.println("  - " + e.getKey() + ": " + e.getValue() + " productos"));
-        }
-        System.out.println();
-    }
-    
-    /**
-     * Inicializa ocupación de almacenes desde productos que ya llegaron.
-     * Solo cuenta productos con estado ARRIVED (físicamente en almacén).
-     * 
-     * @param asignacionesExistentes Mapa de instancia de vuelo -> lista de productos
-     */
-    private void inicializarOcupacionAlmacenesDesdeDB(
-            Map<String, List<Producto>> asignacionesExistentes) {
-        
-        System.out.println("--- Inicializando Ocupación de Almacenes desde BD ---");
-        
-        int totalProductosEnAlmacenes = 0;
-        Map<String, Integer> ocupacionPorAeropuerto = new HashMap<>();
-        
-        for (List<Producto> productos : asignacionesExistentes.values()) {
-            for (Producto producto : productos) {
-                // Solo contar productos que llegaron al almacén
-                if (producto.getEstado() != null && 
-                    producto.getEstado().name().equals("ARRIVED")) {
-                    
-                    Pedido pedido = buscarPedidoPorId(producto.getPedido().getId());
-                    if (pedido != null) {
-                        Aeropuerto aeropuertoDestino = obtenerAeropuerto(
-                            pedido.getAeropuertoDestinoCodigo()
-                        );
-                        if (aeropuertoDestino != null) {
-                            int ocupacionActual = ocupacionAlmacenes.getOrDefault(
-                                aeropuertoDestino, 0
-                            );
-                            ocupacionAlmacenes.put(aeropuertoDestino, ocupacionActual + 1);
-                            totalProductosEnAlmacenes++;
-                            
-                            // Tracking para log
-                            String codigo = aeropuertoDestino.getCodigoIATA();
-                            ocupacionPorAeropuerto.merge(codigo, 1, Integer::sum);
-                        }
-                    }
-                }
-            }
-        }
-        
-        System.out.println("✓ Ocupación de almacenes inicializada:");
-        System.out.println("  - Total productos en almacenes: " + totalProductosEnAlmacenes);
-        
-        if (!ocupacionPorAeropuerto.isEmpty()) {
-            System.out.println("\nOcupación por aeropuerto:");
-            ocupacionPorAeropuerto.entrySet().stream()
-                .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
-                .limit(10)
-                .forEach(e -> System.out.println("  - " + e.getKey() + ": " + e.getValue() + " productos"));
-        }
-        System.out.println();
-    }
-    
-    /**
-     * Parsea el ID de vuelo desde una cadena de instancia de vuelo.
-     * Formato esperado: "FL-{vueloId}-DAY-{day}-{HHmm}"
-     * 
-     * @param idInstancia ID de instancia de vuelo
-     * @return ID del vuelo, o null si no se puede parsear
-     */
-    private Integer parsearVueloIdDesdeInstancia(String idInstancia) {
-        if (idInstancia == null || !idInstancia.startsWith("FL-")) {
-            return null;
-        }
-        
-        try {
-            // "FL-45-DAY-0-0800" -> split por "-" -> ["FL", "45", "DAY", "0", "0800"]
-            String[] partes = idInstancia.split("-");
-            if (partes.length >= 2) {
-                return Integer.parseInt(partes[1]);
-            }
-        } catch (NumberFormatException e) {
-            System.err.println("Error parseando vueloId de: " + idInstancia);
-        }
-        
-        return null;
-    }
-    
-    /**
-     * Busca un vuelo en la lista de vuelos por su ID.
-     * 
-     * @param vueloId ID del vuelo
-     * @return Vuelo encontrado, o null si no existe
-     */
-    private Vuelo buscarVueloPorId(Integer vueloId) {
-        if (vueloId == null) return null;
-        
-        return vuelos.stream()
-            .filter(v -> vueloId.equals(v.getId()))
-            .findFirst()
-            .orElse(null);
-    }
-    
-    /**
-     * Busca un pedido en la lista de pedidos por su ID.
-     * 
-     * @param pedidoId ID del pedido
-     * @return Pedido encontrado, o null si no existe
-     */
-    private Pedido buscarPedidoPorId(Integer pedidoId) {
-        if (pedidoId == null) return null;
 
-        return pedidos.stream()
-                .filter(p -> pedidoId.equals(p.getId()))
-                .findFirst()
-                .orElse(null);
-    }
     /**
-     * NUEVO: Obtiene la solución a nivel de producto CON tiempos absolutos.
+     * Obtiene la solución a nivel de producto CON tiempos absolutos.
      * Esta versión incluye fechas de salida/llegada calculadas por el ALNS.
      * 
      * @return Map<Producto, RutaConTiempos> con rutas y tiempos calculados

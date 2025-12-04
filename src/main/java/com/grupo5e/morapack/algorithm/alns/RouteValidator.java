@@ -71,8 +71,8 @@ public class RouteValidator {
             String destinoKey = getAirportKey(vuelo.getAeropuertoDestino());
 
             flightLookupMap
-                .computeIfAbsent(origenKey, k -> new HashMap<>())
-                .put(destinoKey, vuelo);
+                    .computeIfAbsent(origenKey, k -> new HashMap<>())
+                    .put(destinoKey, vuelo);
         }
     }
 
@@ -80,8 +80,9 @@ public class RouteValidator {
      * CRÍTICO: Valida ruta con enforcement de layover mínimo de 1 hora
      * 
      * @param pedido Pedido a validar
-     * @param ruta Ruta a verificar
-     * @return true si la ruta satisface todas las restricciones incluyendo layover mínimo
+     * @param ruta   Ruta a verificar
+     * @return true si la ruta satisface todas las restricciones incluyendo layover
+     *         mínimo
      */
     public boolean isRouteValidWithLayoverCheck(Pedido pedido, ArrayList<Vuelo> ruta) {
         if (pedido == null || ruta == null) {
@@ -91,8 +92,8 @@ public class RouteValidator {
         // Ruta vacía significa que el paquete ya está en destino
         if (ruta.isEmpty()) {
             return pedido.getAeropuertoOrigenCodigo() != null &&
-                   pedido.getAeropuertoDestinoCodigo() != null &&
-                   pedido.getAeropuertoOrigenCodigo().equals(pedido.getAeropuertoDestinoCodigo());
+                    pedido.getAeropuertoDestinoCodigo() != null &&
+                    pedido.getAeropuertoOrigenCodigo().equals(pedido.getAeropuertoDestinoCodigo());
         }
 
         // Validar estructura básica de ruta
@@ -103,7 +104,8 @@ public class RouteValidator {
         // CRÍTICO: Validar tiempos mínimos de layover en paradas intermedias
         if (!validateMinimumLayoverTimes(pedido, ruta)) {
             if (DEBUG_MODE) {
-                System.out.println("Validación de ruta falló: Tiempo de layover mínimo no satisfecho para pedido " + pedido.getId());
+                System.out.println("Validación de ruta falló: Tiempo de layover mínimo no satisfecho para pedido "
+                        + pedido.getId());
             }
             return false;
         }
@@ -121,13 +123,16 @@ public class RouteValidator {
     /**
      * CRÍTICO: Valida layover mínimo de 1 hora en paradas intermedias
      * 
-     * NOTA: Implementación simplificada - nuestra estructura Vuelo usa LocalTime (horaSalida)
-     * en lugar de LocalDateTime, por lo que la validación de layover con fechas específicas
-     * no es posible. Esta validación asume que el algoritmo principal maneja los tiempos
+     * NOTA: Implementación simplificada - nuestra estructura Vuelo usa LocalTime
+     * (horaSalida)
+     * en lugar de LocalDateTime, por lo que la validación de layover con fechas
+     * específicas
+     * no es posible. Esta validación asume que el algoritmo principal maneja los
+     * tiempos
      * de conexión adecuadamente.
      * 
      * @param pedido Pedido a validar
-     * @param ruta Ruta con posibles layovers
+     * @param ruta   Ruta con posibles layovers
      * @return true (siempre, dado que no tenemos fechas específicas para validar)
      */
     private boolean validateMinimumLayoverTimes(Pedido pedido, ArrayList<Vuelo> ruta) {
@@ -135,8 +140,10 @@ public class RouteValidator {
             return true; // Sin conexiones, sin layovers
         }
 
-        // TODO: Implementar validación de layover cuando Vuelo incluya fechas específicas
-        // Por ahora, asumimos que el algoritmo principal respeta el tiempo mínimo de conexión
+        // TODO: Implementar validación de layover cuando Vuelo incluya fechas
+        // específicas
+        // Por ahora, asumimos que el algoritmo principal respeta el tiempo mínimo de
+        // conexión
         return true;
     }
 
@@ -146,8 +153,8 @@ public class RouteValidator {
     private boolean validateRouteStructure(Pedido pedido, ArrayList<Vuelo> ruta) {
         // Verificar origen
         Aeropuerto origenEsperado = getAirportByCode(pedido.getAeropuertoOrigenCodigo());
-        if (origenEsperado == null || 
-            !ruta.get(0).getAeropuertoOrigen().getCodigoIATA().equals(origenEsperado.getCodigoIATA())) {
+        if (origenEsperado == null ||
+                !ruta.get(0).getAeropuertoOrigen().getCodigoIATA().equals(origenEsperado.getCodigoIATA())) {
             return false;
         }
 
@@ -162,8 +169,8 @@ public class RouteValidator {
         // Verificar destino
         Aeropuerto destinoEsperado = getAirportByCode(pedido.getAeropuertoDestinoCodigo());
         return destinoEsperado != null &&
-               ruta.get(ruta.size() - 1).getAeropuertoDestino().getCodigoIATA()
-                   .equals(destinoEsperado.getCodigoIATA());
+                ruta.get(ruta.size() - 1).getAeropuertoDestino().getCodigoIATA()
+                        .equals(destinoEsperado.getCodigoIATA());
     }
 
     /**
@@ -184,10 +191,11 @@ public class RouteValidator {
     /**
      * Valida capacidad de ruta para cantidad de productos.
      * 
-     * CRÍTICO: Los almacenes principales (Lima, Bruselas, Baku) tienen capacidad ILIMITADA.
+     * CRÍTICO: Los almacenes principales (Lima, Bruselas, Baku) tienen capacidad
+     * ILIMITADA.
      * Esta validación NO se aplica a vuelos hacia/desde almacenes principales.
      * 
-     * @param ruta Ruta a validar
+     * @param ruta              Ruta a validar
      * @param cantidadProductos Cantidad de productos a enviar
      * @return true si la capacidad es válida
      */
@@ -196,21 +204,21 @@ public class RouteValidator {
             // CRÍTICO: Saltear validación si el destino es un almacén principal
             if (esAlmacenPrincipal(vuelo.getAeropuertoDestino())) {
                 if (DEBUG_MODE) {
-                    System.out.println("  ✓ Almacén principal detectado: " + 
-                        vuelo.getAeropuertoDestino().getCiudad().getNombre() + 
-                        " - Capacidad ILIMITADA");
+                    System.out.println("  ✓ Almacén principal detectado: " +
+                            vuelo.getAeropuertoDestino().getCiudad().getNombre() +
+                            " - Capacidad ILIMITADA");
                 }
                 continue; // No validar capacidad en almacenes principales
             }
-            
+
             // Validar capacidad para aeropuertos regulares
             if (vuelo.getCapacidadUsada() + cantidadProductos > vuelo.getCapacidadMaxima()) {
                 if (DEBUG_MODE) {
-                    System.out.println("  ✗ Capacidad insuficiente en vuelo " + 
-                        vuelo.getIdentificadorVuelo() + 
-                        " (usado: " + vuelo.getCapacidadUsada() + 
-                        ", necesita: " + cantidadProductos + 
-                        ", max: " + vuelo.getCapacidadMaxima() + ")");
+                    System.out.println("  ✗ Capacidad insuficiente en vuelo " +
+                            vuelo.getIdentificadorVuelo() +
+                            " (usado: " + vuelo.getCapacidadUsada() +
+                            ", necesita: " + cantidadProductos +
+                            ", max: " + vuelo.getCapacidadMaxima() + ")");
                 }
                 return false;
             }
@@ -261,13 +269,14 @@ public class RouteValidator {
      * validamos que el tiempo total de ruta no exceda el tiempo disponible.
      */
     private boolean validateDeadline(Pedido pedido, ArrayList<Vuelo> ruta) {
-        if (ruta == null || ruta.isEmpty() || pedido.getFechaLimiteEntrega() == null || pedido.getFechaPedido() == null) {
+        if (ruta == null || ruta.isEmpty() || pedido.getFechaLimiteEntrega() == null
+                || pedido.getFechaPedido() == null) {
             return false;
         }
 
         // Calcular tiempo total de ruta en horas
         double tiempoRutaHoras = calculateRouteTime(ruta);
-        
+
         // Calcular tiempo disponible desde el pedido hasta el deadline
         long horasDisponibles = ChronoUnit.HOURS.between(pedido.getFechaPedido(), pedido.getFechaLimiteEntrega());
 
@@ -281,12 +290,12 @@ public class RouteValidator {
     public Vuelo findDirectFlight(Aeropuerto origen, Aeropuerto destino) {
         String origenKey = getAirportKey(origen);
         String destinoKey = getAirportKey(destino);
-        
+
         Map<String, Vuelo> destinosDesdeOrigen = flightLookupMap.get(origenKey);
         if (destinosDesdeOrigen == null) {
             return null;
         }
-        
+
         return destinosDesdeOrigen.get(destinoKey);
     }
 
@@ -297,7 +306,7 @@ public class RouteValidator {
         if (codigoIATA == null) {
             return null;
         }
-        
+
         for (Aeropuerto aeropuerto : cityToAirportMap.values()) {
             if (aeropuerto.getCodigoIATA().equals(codigoIATA)) {
                 return aeropuerto;
@@ -325,12 +334,12 @@ public class RouteValidator {
             return "";
         }
         return cityName.trim().toLowerCase()
-            .replaceAll("\\s+", "_")
-            .replaceAll("[áàäâã]", "a")
-            .replaceAll("[éèëê]", "e")
-            .replaceAll("[íìïî]", "i")
-            .replaceAll("[óòöôõ]", "o")
-            .replaceAll("[úùüû]", "u");
+                .replaceAll("\\s+", "_")
+                .replaceAll("[áàäâã]", "a")
+                .replaceAll("[éèëê]", "e")
+                .replaceAll("[íìïî]", "i")
+                .replaceAll("[óòöôõ]", "o")
+                .replaceAll("[úùüû]", "u");
     }
 
     /**
@@ -340,9 +349,8 @@ public class RouteValidator {
         if (aeropuerto == null) {
             return "";
         }
-        return aeropuerto.getCodigoIATA() != null ? 
-            aeropuerto.getCodigoIATA() : 
-            normalizeCity(aeropuerto.getCiudad().getNombre());
+        return aeropuerto.getCodigoIATA() != null ? aeropuerto.getCodigoIATA()
+                : normalizeCity(aeropuerto.getCiudad().getNombre());
     }
 
     /**
@@ -371,4 +379,3 @@ public class RouteValidator {
         return cacheRouteTime.size() + cacheDeadline.size();
     }
 }
-

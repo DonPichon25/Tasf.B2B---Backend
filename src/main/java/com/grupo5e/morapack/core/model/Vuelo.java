@@ -20,7 +20,7 @@ import java.time.LocalTime;
 @NoArgsConstructor
 @Entity
 @Table(name = "vuelos")
-@JsonIgnoreProperties({"hibernateLazyInitializer", "handler", "rutas"})
+@JsonIgnoreProperties({ "hibernateLazyInitializer", "handler", "rutas" })
 public class Vuelo {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "vuelo_seq")
@@ -29,9 +29,9 @@ public class Vuelo {
 
     // Número de frecuencias por día (ejemplo: 2 vuelos diarios)
     private double frecuenciaPorDia;
-//    private Time horaSalida;
-//    private Time horaLlegada;
-// Campos temporales para identificación y cancelaciones
+    // private Time horaSalida;
+    // private Time horaLlegada;
+    // Campos temporales para identificación y cancelaciones
     private LocalTime horaSalida;
     private LocalTime horaLlegada;
     // Relación: un vuelo tiene un aeropuerto origen
@@ -63,6 +63,7 @@ public class Vuelo {
 
     @Column(nullable = true)
     private int tipoData;
+
     /**
      * Genera el identificador único del vuelo basado en ruta y horario.
      * Formato: "ORIGEN-DESTINO-HH:MM"
@@ -75,10 +76,9 @@ public class Vuelo {
             return null;
         }
         return String.format("%s-%s-%02d:%02d",
-            aeropuertoOrigen.getCodigoIATA(),
-            aeropuertoDestino.getCodigoIATA(),
-            horaSalida.getHour(),
-            horaSalida.getMinute()
-        );
+                aeropuertoOrigen.getCodigoIATA(),
+                aeropuertoDestino.getCodigoIATA(),
+                horaSalida.getHour(),
+                horaSalida.getMinute());
     }
 }
