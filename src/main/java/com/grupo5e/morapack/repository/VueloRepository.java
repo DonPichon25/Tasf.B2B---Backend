@@ -15,19 +15,19 @@ import java.util.List;
 @Repository
 public interface VueloRepository extends JpaRepository<Vuelo, Integer> {
     List<Vuelo> findByAeropuertoOrigenIdAndAeropuertoDestinoId(Integer origenId, Integer destinoId);
+
     List<Vuelo> findByEstado(EstadoVuelo estado);
+
     List<Vuelo> findByCapacidadMaximaGreaterThanEqual(Integer capacidad);
+
     @Modifying
     @Transactional
     @Query(value = "DELETE FROM vuelos WHERE tipo_data = 0", nativeQuery = true)
     void eliminarTipoDataCero();
 
-    @Query(value = "select count(id) from vuelos where tipo_data = 0",nativeQuery = true)
+    @Query(value = "select count(id) from vuelos where tipo_data = 0", nativeQuery = true)
     int contarTipoDataCero();
 
-    @Query(
-            value = "SELECT * FROM vuelos WHERE tipo_data = :tipoData",
-            nativeQuery = true
-    )
+    @Query(value = "SELECT * FROM vuelos WHERE tipo_data = :tipoData", nativeQuery = true)
     List<Vuelo> listarPorTipoData(@Param("tipoData") int tipoData);
 }

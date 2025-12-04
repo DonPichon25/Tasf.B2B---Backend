@@ -37,6 +37,12 @@ public class Constantes {
     public static final int TIEMPO_CONEXION_MINUTOS = 60;
 
     // ===================================================================
+    // HORIZONTE DE SIMULACION TEMPORAL
+    // ===================================================================
+    public static final int HORIZON_DAYS_MIN = 3;
+    public static final int HORIZON_DAYS_MAX = 5;
+
+    // ===================================================================
     // CONSTANTES DEL ALGORITMO
     // ===================================================================
     public static final int LIMITE_INFERIOR_ESPACIO_SOLUCION = 100;
