@@ -2,12 +2,13 @@ package com.grupo5e.morapack.service;
 
 import com.grupo5e.morapack.core.model.Pedido;
 import com.grupo5e.morapack.core.enums.EstadoPedido;
-
+import com.grupo5e.morapack.api.dto.CrearPedidoEnVivoDTO;
 import java.util.List;
 
 public interface PedidoService {
     List<Pedido> listar();
     Integer insertar(Pedido pedido);
+    Pedido crearPedidoEnVivo(CrearPedidoEnVivoDTO dto);
     Pedido actualizar(Integer id, Pedido pedido);
     Pedido buscarPorId(Integer id);
     List<Pedido> buscarPorCliente(Long clienteId);

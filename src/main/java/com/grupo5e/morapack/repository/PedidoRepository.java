@@ -119,4 +119,6 @@ public interface PedidoRepository extends JpaRepository<Pedido, Integer> {
 
     @Query(value = "select count(id) from pedidos where tipo_data = 0",nativeQuery = true)
     int contarTipoDataCero();
+    @Query("SELECT COALESCE(MAX(p.id), 0) FROM Pedido p WHERE p.tipoData = :tipoData")
+    Integer findMaxIdByTipoData(@Param("tipoData") int tipoData);
 }

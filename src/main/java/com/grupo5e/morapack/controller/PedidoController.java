@@ -19,7 +19,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.grupo5e.morapack.api.dto.CrearPedidoEnVivoDTO;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -73,7 +73,11 @@ public class PedidoController {
         Integer id = pedidoService.insertar(pedido);
         return ResponseEntity.status(HttpStatus.CREATED).body(id);
     }
-
+    @PostMapping("/en-vivo")
+    public ResponseEntity<Integer> crearPedidoEnVivo(@RequestBody CrearPedidoEnVivoDTO dto) {
+        Pedido pedido = pedidoService.crearPedidoEnVivo(dto);
+        return ResponseEntity.ok(pedido.getId());
+    }
     @Operation(summary = "Actualizar pedido", description = "Actualiza un pedido existente")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Pedido actualizado exitosamente",

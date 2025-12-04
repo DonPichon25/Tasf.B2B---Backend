@@ -1,25 +1,37 @@
 package com.grupo5e.morapack.service.impl;
 
+import com.grupo5e.morapack.api.dto.CrearPedidoEnVivoDTO;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.core.enums.EstadoPedido;
-import com.grupo5e.morapack.core.model.Pedido;
+import com.grupo5e.morapack.core.enums.EstadoProducto;
+import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.repository.PedidoRepository;
+import com.grupo5e.morapack.repository.ProductoRepository;
+import com.grupo5e.morapack.service.AeropuertoService;
+import com.grupo5e.morapack.service.ClienteService;
 import com.grupo5e.morapack.service.PedidoService;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
 import java.util.stream.Collectors;
-
 @Service
 public class PedidoServiceImpl implements PedidoService {
 
     private final PedidoRepository pedidoRepository;
+    private final ProductoRepository productoRepository;
     private EntityManager entityManager;
+    private final AeropuertoService aeropuertoService;
+    private final ClienteService clienteService;
 
-    public PedidoServiceImpl(PedidoRepository pedidoRepository) {
+    public PedidoServiceImpl(PedidoRepository pedidoRepository, ProductoRepository productoRepository, AeropuertoService aeropuertoService, ClienteService clienteService) {
         this.pedidoRepository = pedidoRepository;
+        this.productoRepository = productoRepository;
+        this.aeropuertoService = aeropuertoService;
+        this.clienteService = clienteService;
     }
 
     @Override
@@ -43,7 +55,126 @@ public class PedidoServiceImpl implements PedidoService {
         pedido.setId(id);
         return pedidoRepository.save(pedido);
     }
+    @Override
+    @Transactional
+    public Pedido crearPedidoEnVivo(CrearPedidoEnVivoDTO dto) {
 
+        // 1) Calcular ID nuevo
+        Integer maxId = pedidoRepository.findMaxIdByTipoData(1);
+        int nuevoId = (maxId != null ? maxId : 0) + 1;
+
+        // 2) Fecha pedido = la que viene del front (inicio próxima ventana)
+        LocalDateTime fechaPedido = dto.getFechaPedido();
+        if (fechaPedido == null) {
+            // fallback por si acaso
+            fechaPedido = LocalDateTime.now();
+        }
+
+        // 3) Fecha límite = fechaPedido + 3 días
+        LocalDateTime fechaLimiteEntrega = fechaPedido.plusDays(3);
+
+        // 4) Aeropuerto destino
+        String codigoDestino = dto.getAeropuertoDestinoCodigo().trim().toUpperCase();
+
+        Optional<Aeropuerto> optDestino = aeropuertoService.buscarPorCodigoIATA(codigoDestino);
+        Aeropuerto aeropuertoDestino = optDestino.orElseThrow(
+                () -> new IllegalArgumentException("Aeropuerto destino desconocido: " + codigoDestino)
+        );
+
+        // 5) Aeropuerto ORIGEN
+        Optional<Aeropuerto> optOrigen = aeropuertoService.buscarPorCodigoIATA(obtenerAeropuertoOrigenParaDestino(aeropuertoDestino));
+        Aeropuerto aeropuertoOrigen= optOrigen.orElseThrow(
+                () -> new IllegalArgumentException("Aeropuerto destino desconocido: " + obtenerAeropuertoOrigenParaDestino(aeropuertoDestino))
+        );
+        // 6) Cliente (puede ser un cliente "dummy" o buscado por ciudad, como en parsearLineaPedido)
+        Cliente cliente = clienteService.buscarPorId(27167L,1);//CUIDAOOOOOOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+        // 7) Construir Pedido
+        Pedido pedido = new Pedido();
+        //pedido.setId(94872);//cambiar pa q use el nuevo id
+        pedido.setTipoData(1);
+
+        // external_id: DESTINO + "-" + id con ceros a la izquierda
+        String externalId = dto.getAeropuertoDestinoCodigo() + "-" +
+                String.format("%09d", 94873); // 9 dígitos: 000023653
+        pedido.setExternalId(externalId);
+
+        pedido.setNombre("PEDIDO-" + 94873 + "-" + codigoDestino);
+        pedido.setCliente(cliente);
+        //pedido.getCliente().setTipoData(1);
+
+        pedido.setAeropuertoOrigenCodigo(aeropuertoOrigen.getCodigoIATA());
+        pedido.setAeropuertoDestinoCodigo(aeropuertoDestino.getCodigoIATA());
+
+        pedido.setFechaPedido(fechaPedido);
+        pedido.setFechaLimiteEntrega(fechaLimiteEntrega);
+        pedido.setFechaCreacion(LocalDateTime.now());
+        pedido.setEstado(EstadoPedido.PENDIENTE);
+
+        // 8) Prioridad
+        double prioridad = calcularPrioridad(fechaPedido, fechaLimiteEntrega);
+        pedido.setPrioridad(prioridad);
+
+        // 9) Cantidad y productos
+        int cantidadProductos = dto.getCantidadProductos();
+        pedido.setCantidadProductos(cantidadProductos);
+
+        List<Producto> productos = crearProductos(cantidadProductos, pedido);
+        pedido.setProductos(productos);
+
+        // 10) Guardar
+        pedidoRepository.save(pedido);
+        productoRepository.saveAll(productos);
+
+        return pedido;
+    }
+
+    // Puedes reutilizar estas helper o copiarlas de donde ya las tienes:
+    private String obtenerAeropuertoOrigenParaDestino(Aeropuerto destino) {
+        // Lista de códigos IATA de los aeropuertos principales de MoraPack
+        String[] aeropuertosPrincipales = {"SPIM", "UBBB", "EBCI"};
+        ArrayList<String> aeropuertos = new ArrayList<>();
+
+        Random random = new Random();
+        for (int i = 0; i < 3; i++) {
+            if(Objects.equals(destino, aeropuertosPrincipales[i]))
+                continue;
+            aeropuertos.add(aeropuertosPrincipales[i]);
+        }
+        int indiceAleatorio = random.nextInt(aeropuertos.size());
+        String codigoIATAOrigen = aeropuertos.get(indiceAleatorio);
+        //System.out.println("🔀 Usando aeropuerto por defecto: " + codigoIATAOrigen);
+        return codigoIATAOrigen;
+    }
+
+    private double calcularPrioridad(LocalDateTime fechaPedido, LocalDateTime plazoEntrega) {
+        long horas = ChronoUnit.HOURS.between(fechaPedido, plazoEntrega);
+
+        if (horas <= 24) {
+            return 1.0;
+        } else if (horas <= 96) {
+            return 0.75;
+        } else if (horas <= 288) {
+            return 0.5;
+        } else {
+            return 0.25;
+        }
+    }
+
+    private ArrayList<Producto> crearProductos(int cantidad, Pedido pedido) {
+        ArrayList<Producto> productos = new ArrayList<>();
+        for (int i = 0; i < cantidad; i++) {
+            Producto producto = new Producto();
+            producto.setNombre("PRODUCT-" + (i + 1));
+            producto.setPeso(1.0);  // Peso por defecto
+            producto.setVolumen(1.0);  // Volumen por defecto
+            producto.setEstado(EstadoProducto.EN_ALMACEN);
+            producto.setPedido(pedido);
+            producto.setTipoData(1);
+            productos.add(producto);
+        }
+        return productos;
+    }
     @Override
     public Pedido buscarPorId(Integer id) {
         return pedidoRepository.findById(id).orElse(null);
