@@ -26,17 +26,19 @@ import java.util.List;
 public class LectorCancelaciones {
 
     private final String rutaArchivo;
-    //private final VueloService vueloService;
+    // private final VueloService vueloService;
     private ArrayList<Vuelo> vuelos;
     private ArrayList<Cancelacion> cancelaciones;
-//    public LectorCancelaciones(String rutaArchivo) {
-//        this.rutaArchivo = rutaArchivo;
-//    }
+
+    // public LectorCancelaciones(String rutaArchivo) {
+    // this.rutaArchivo = rutaArchivo;
+    // }
     public LectorCancelaciones(String rutaArchivo, ArrayList<Vuelo> vuelos) {
         this.rutaArchivo = rutaArchivo;
         this.vuelos = vuelos;
         this.cancelaciones = new ArrayList<Cancelacion>();
     }
+
     /**
      * Lee el archivo de cancelaciones y retorna una lista de objetos Cancelacion.
      *
@@ -77,7 +79,8 @@ public class LectorCancelaciones {
 
                     String identificador = partes[1].trim(); // ORIGEN-DESTINO-HH:MM
                     if (!validarFormatoIdentificador(identificador)) {
-                        System.err.println("Identificador de vuelo inválido en línea " + lineasLeidas + ": " + identificador);
+                        System.err.println(
+                                "Identificador de vuelo inválido en línea " + lineasLeidas + ": " + identificador);
                         lineasInvalidas++;
                         continue;
                     }
@@ -102,24 +105,33 @@ public class LectorCancelaciones {
                     cancelacion.setMinuto(minuto);
                     cancelacion.setFechaHoraCancelacion(LocalDateTime.now());
                     // Intentar asociar el Vuelo correspondiente desde la lista proporcionada
-                    Vuelo vueloEncontrado = encontrarVueloCoincidente(codigoIATAOrigen, codigoIATADestino, hora, minuto);
+                    Vuelo vueloEncontrado = encontrarVueloCoincidente(codigoIATAOrigen, codigoIATADestino, hora,
+                            minuto);
                     if (vueloEncontrado != null) {
                         cancelacion.setVuelo(vueloEncontrado);
                     } else {
-                        // Si no se encuentra por hora exacta, intentar emparejar solo por origen/destino
+                        // Si no se encuentra por hora exacta, intentar emparejar solo por
+                        // origen/destino
                         vueloEncontrado = encontrarVueloPorRutas(codigoIATAOrigen, codigoIATADestino);
                         if (vueloEncontrado != null) {
                             cancelacion.setVuelo(vueloEncontrado);
-                            System.err.println("Advertencia: línea " + lineasLeidas + " - vuelo emparejado por ruta sin coincidencia exacta de hora: " + identificador);
+                            System.err.println("Advertencia: línea " + lineasLeidas
+                                    + " - vuelo emparejado por ruta sin coincidencia exacta de hora: " + identificador);
                         } else {
-                            System.err.println("Advertencia: vuelo no encontrado para cancelación en línea " + lineasLeidas + ": " + identificador);
-                            // No abortar: dejar vuelo nulo y permitir que la validación posterior lo detecte o manejarlo según necesidad
+                            System.err.println("Advertencia: vuelo no encontrado para cancelación en línea "
+                                    + lineasLeidas + ": " + identificador);
+                            // No abortar: dejar vuelo nulo y permitir que la validación posterior lo
+                            // detecte o manejarlo según necesidad
                         }
                     }
 
                     cancelaciones.add(cancelacion);
-                    System.out.println("📝 Cancelacion: Día= "+ cancelacion.getDiasCancelado() + "|" + cancelacion.getCodigoIATAOrigen()+
-                            "-"+ cancelacion.getCodigoIATADestino()+ "|" +cancelacion.getHora()+":"+cancelacion.getMinuto()+"| VueloID="+cancelacion.getVuelo() != null ? cancelacion.getVuelo().getId() : "NULL");
+                    System.out.println("📝 Cancelacion: Día= " + cancelacion.getDiasCancelado() + "|"
+                            + cancelacion.getCodigoIATAOrigen() +
+                            "-" + cancelacion.getCodigoIATADestino() + "|" + cancelacion.getHora() + ":"
+                            + cancelacion.getMinuto() + "| VueloID=" + cancelacion.getVuelo() != null
+                                    ? cancelacion.getVuelo().getId()
+                                    : "NULL");
                     lineasValidas++;
 
                 } catch (NumberFormatException e) {
@@ -159,14 +171,19 @@ public class LectorCancelaciones {
         String ultimaParte = partes[2];
         return ultimaParte.matches("\\d{2}:\\d{2}");
     }
+
     private Vuelo encontrarVueloCoincidente(String origen, String destino, int hora, int minuto) {
-        if (vuelos == null) return null;
+        if (vuelos == null)
+            return null;
         for (Vuelo v : vuelos) {
-            if (v == null) continue;
-            if (v.getAeropuertoOrigen() == null || v.getAeropuertoDestino() == null) continue;
+            if (v == null)
+                continue;
+            if (v.getAeropuertoOrigen() == null || v.getAeropuertoDestino() == null)
+                continue;
             String ori = v.getAeropuertoOrigen().getCodigoIATA();
             String dest = v.getAeropuertoDestino().getCodigoIATA();
-            if (ori == null || dest == null) continue;
+            if (ori == null || dest == null)
+                continue;
             if (origen.equalsIgnoreCase(ori.trim()) && destino.equalsIgnoreCase(dest.trim())) {
                 LocalTime salida = v.getHoraSalida();
                 if (salida != null && salida.getHour() == hora && salida.getMinute() == minuto) {
@@ -178,13 +195,17 @@ public class LectorCancelaciones {
     }
 
     private Vuelo encontrarVueloPorRutas(String origen, String destino) {
-        if (vuelos == null) return null;
+        if (vuelos == null)
+            return null;
         for (Vuelo v : vuelos) {
-            if (v == null) continue;
-            if (v.getAeropuertoOrigen() == null || v.getAeropuertoDestino() == null) continue;
+            if (v == null)
+                continue;
+            if (v.getAeropuertoOrigen() == null || v.getAeropuertoDestino() == null)
+                continue;
             String ori = v.getAeropuertoOrigen().getCodigoIATA();
             String dest = v.getAeropuertoDestino().getCodigoIATA();
-            if (ori == null || dest == null) continue;
+            if (ori == null || dest == null)
+                continue;
             if (origen.equalsIgnoreCase(ori.trim()) && destino.equalsIgnoreCase(dest.trim())) {
                 return v;
             }

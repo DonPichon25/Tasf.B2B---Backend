@@ -234,7 +234,8 @@ public class PedidoServiceImpl implements PedidoService {
 
     /**
      * OPTIMIZACIÓN: Buscar múltiples pedidos por IDs en una sola query.
-     * Usa findAllById() de JpaRepository que genera un query eficiente con IN clause.
+     * Usa findAllById() de JpaRepository que genera un query eficiente con IN
+     * clause.
      */
     @Override
     public List<Pedido> buscarPorIds(List<Integer> ids) {

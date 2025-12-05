@@ -82,14 +82,14 @@ public class AeropuertoServiceImpl implements AeropuertoService {
         if (aeropuerto == null) {
             throw new ResourceNotFoundException("Aeropuerto", "id", id);
         }
-        
+
         // Cambiar estado: DISPONIBLE ↔ NO_DISPONIBLE
         if (aeropuerto.getEstado() == EstadoAeropuerto.DISPONIBLE) {
             aeropuerto.setEstado(EstadoAeropuerto.NO_DISPONIBLE);
         } else {
             aeropuerto.setEstado(EstadoAeropuerto.DISPONIBLE);
         }
-        
+
         return aeropuertoRepository.save(aeropuerto);
     }
 
