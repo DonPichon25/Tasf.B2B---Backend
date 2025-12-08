@@ -19,17 +19,22 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ResultadoCancelacionDTO {
-    
+
     /**
      * Indica si la cancelación fue exitosa.
      */
     private Boolean exitoso;
-    
+
     /**
      * ID del vuelo cancelado.
      */
     private Integer vueloId;
-    
+    // Info de la instancia cancelada
+    private String idInstancia;
+    private Integer vueloBaseId;
+    private String origen;
+    private String destino;
+    private Integer pedidosAfectados;
     /**
      * Mensaje descriptivo del resultado de la operación.
      */

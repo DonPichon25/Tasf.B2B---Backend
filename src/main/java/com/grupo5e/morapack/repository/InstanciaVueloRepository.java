@@ -3,9 +3,11 @@ package com.grupo5e.morapack.repository;
 import com.grupo5e.morapack.core.model.InstanciaVuelo;
 import com.grupo5e.morapack.core.model.Vuelo;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,7 +28,17 @@ public interface InstanciaVueloRepository extends JpaRepository<InstanciaVuelo, 
      * Encuentra todas las instancias de un vuelo base por ID.
      */
     List<InstanciaVuelo> findByVueloBaseId(Integer vueloBaseId);
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM InstanciaVuelo i WHERE i.fechaHoraSalida >= :desde")
+    int deleteByFechaHoraSalidaFrom(@Param("desde") LocalDateTime desde);
 
+
+    @Query("SELECT i FROM InstanciaVuelo i WHERE i.fechaHoraSalida = :fechaHoraSalidaio AND i.vueloBase.id= :vueloBaseId")
+    Optional<InstanciaVuelo> findByVueloBase_IdAndFechaHoraSalida(
+            @Param("vueloBaseId")Integer vueloBaseId,
+            @Param("fechaHoraSalidaio") LocalDateTime fechaHoraSalida
+    );
     /**
      * Encuentra instancias que salen dentro de una ventana de tiempo.
      */

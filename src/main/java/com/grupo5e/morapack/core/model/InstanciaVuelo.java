@@ -47,7 +47,10 @@ public class InstanciaVuelo {
     @Column(name = "capacidad_usada", nullable = false)
     @Builder.Default
     private Integer capacidadUsada = 0;
-    
+    @Column(name = "estado_instancia", nullable = false, length = 20)
+    private String estadoInstancia ;
+    @Column(name = "productos_asignados", nullable = false)
+    private Integer productosAsignados = 0;
     /**
      * Genera un ID único para esta instancia de vuelo.
      * Formato: "FL-{vueloId}-DAY-{day}-{HHmm}"
