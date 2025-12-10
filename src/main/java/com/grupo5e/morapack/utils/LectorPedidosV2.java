@@ -265,8 +265,8 @@ public class LectorPedidosV2 {
             LocalDateTime horaFin,
             ResultadoCargaPedidos resultado) throws IOException {
 
-        System.out.println("  📂 Procesando archivo Día a Día: " + archivo.getName());
-        System.out.println("  🕒 Ventana temporal: " + horaInicio + " a " + horaFin);
+//        System.out.println("  📂 Procesando archivo Día a Día: " + archivo.getName());
+//        System.out.println("  🕒 Ventana temporal: " + horaInicio + " a " + horaFin);
 
         int i=1;
         try (BufferedReader reader = new BufferedReader(new FileReader(archivo))) {
@@ -434,7 +434,7 @@ public class LectorPedidosV2 {
         }
     }
     private Pedido parsearLineaPedidoDiaDia(String linea) {
-        System.out.println("  📖 [DIA_A_DIA] Parseando línea: " + linea);
+        //System.out.println("  📖 [DIA_A_DIA] Parseando línea: " + linea);
 
         String[] partes = linea.split("-");
         if (partes.length != 7) {
@@ -451,16 +451,16 @@ public class LectorPedidosV2 {
         int cantidadProductos = Integer.parseInt(partes[5]);
         String idClienteStr = partes[6];
 
-        System.out.println("  📦 [DIA_A_DIA] Datos parseados:");
-        System.out.println("     - ID Pedido: " + idPedidoStr);
-        System.out.println("     - Fecha: " + fechaStr + " | Hora: " + hora + ":" + minuto);
-        System.out.println("     - Destino: " + codigoAeropuertoDestino);
-        System.out.println("     - Cantidad productos: " + cantidadProductos);
-        System.out.println("     - ID Cliente: " + idClienteStr);
+//        System.out.println("  📦 [DIA_A_DIA] Datos parseados:");
+//        System.out.println("     - ID Pedido: " + idPedidoStr);
+//        System.out.println("     - Fecha: " + fechaStr + " | Hora: " + hora + ":" + minuto);
+//        System.out.println("     - Destino: " + codigoAeropuertoDestino);
+//        System.out.println("     - Cantidad productos: " + cantidadProductos);
+//        System.out.println("     - ID Cliente: " + idClienteStr);
 
         // ✅ VERIFICAR DUPLICADOS: Generar externalId y comprobar existencia
         String externalId = codigoAeropuertoDestino + "-" + idPedidoStr;
-        System.out.println("     - ExternalId generado: " + externalId);
+        //System.out.println("     - ExternalId generado: " + externalId);
 
         Pedido pedidoExistente = pedidoService.buscarPorExternalId(externalId);
         if (pedidoExistente != null) {
@@ -521,7 +521,7 @@ public class LectorPedidosV2 {
         pedido.setProductos(productos);
 
         pedido.setTipoData(1);
-        System.out.println("  ✅ [DIA_A_DIA] Pedido creado exitosamente: " + pedido.getNombre() + " (ExternalId: " + externalId + ")");
+        //System.out.println("  ✅ [DIA_A_DIA] Pedido creado exitosamente: " + pedido.getNombre() + " (ExternalId: " + externalId + ")");
         return pedido;
     }
     /**
