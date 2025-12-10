@@ -87,7 +87,7 @@ public class PedidoServiceImpl implements PedidoService {
                 () -> new IllegalArgumentException("Aeropuerto destino desconocido: " + obtenerAeropuertoOrigenParaDestino(aeropuertoDestino))
         );
         // 6) Cliente (puede ser un cliente "dummy" o buscado por ciudad, como en parsearLineaPedido)
-        Cliente cliente = clienteService.buscarPorId(27167L,1);//CUIDAOOOOOOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        Cliente cliente = clienteService.buscarPorId(14064L,1);//CUIDAOOOOOOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
         // 7) Construir Pedido
         Pedido pedido = new Pedido();
@@ -226,7 +226,10 @@ public class PedidoServiceImpl implements PedidoService {
     public void limpiarBD() {
         pedidoRepository.eliminarTipoDataCero();
     }
-
+    @Override
+    public Pedido buscarPorExternalId(String externalId) {
+        return pedidoRepository.findByExternalId(externalId).orElse(null);
+    }
     @Override
     public int contarPedidosTipoData0() {
         return pedidoRepository.contarTipoDataCero();

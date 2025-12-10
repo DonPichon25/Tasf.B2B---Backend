@@ -253,6 +253,77 @@ public class DataImportController {
         
         return ResponseEntity.status(status).body(result);
     }
+    @PostMapping(value = "/ordersDiaDia", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, Object>> uploadOrdersDiaDia(
+            @Parameter(description = "Archivo pedidos.txt o _pedidos_{AIRPORT}_.txt")
+            @RequestParam("file") MultipartFile file,
+            @Parameter(description = "Hora de inicio para filtrar pedidos (ISO 8601, opcional)", example = "2025-01-02T00:00:00")
+            @RequestParam(required = false) String horaInicio,
+            @Parameter(description = "Hora de fin para filtrar pedidos (ISO 8601, opcional)", example = "2025-01-09T00:00:00")
+            @RequestParam(required = false) String horaFin) {
+
+        String filename = file.getOriginalFilename();
+        log.info("📤 Recibida solicitud de importación de pedidos: {}", filename);
+
+        if (horaInicio != null && horaFin != null) {
+            log.info("   🕒 Ventana de tiempo Dia a Dia: {} a {}", horaInicio, horaFin);
+        }
+
+        // Validar archivo básico
+        if (file.isEmpty()) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo está vacío");
+            log.warn("❌ Archivo vacío rechazado");
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        if (filename == null || !filename.endsWith(".txt")) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "El archivo debe ser formato .txt");
+            log.warn("❌ Formato de archivo inválido: {}", filename);
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        // Parsear fechas si se proporcionaron
+        LocalDateTime horaInicioDateTime = null;
+        LocalDateTime horaFinDateTime = null;
+
+        try {
+            if (horaInicio != null && !horaInicio.isEmpty()) {
+                horaInicioDateTime = LocalDateTime.parse(horaInicio);
+            }
+            if (horaFin != null && !horaFin.isEmpty()) {
+                horaFinDateTime = LocalDateTime.parse(horaFin);
+                // Restar 5 horas para compensar zona horaria UTC-5
+                //horaFinDateTime = horaFinDateTime.minusHours(5);
+            }
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("success", false);
+            error.put("message", "Formato de fecha inválido. Use ISO 8601: yyyy-MM-ddTHH:mm:ss");
+            log.warn("❌ Error parseando fechas: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(error);
+        }
+
+        // Procesar e insertar en BD con filtrado opcional
+        Map<String, Object> result = dataImportService.importOrdersDiaDia(file, horaInicioDateTime, horaFinDateTime);
+
+        boolean success = (boolean) result.get("success");
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+
+        if (success) {
+            log.info("✅ Pedidos importados: {}", result.get("count"));
+            if (result.containsKey("pedidosFiltrados")) {
+                log.info("   📊 Pedidos filtrados (fuera de ventana): {}", result.get("pedidosFiltrados"));
+            }
+        } else {
+            log.error("❌ Error importando pedidos: {}", result.get("message"));
+        }
+
+        return ResponseEntity.status(status).body(result);
+    }
 
     /**
      * Importar múltiples archivos de pedidos en batch

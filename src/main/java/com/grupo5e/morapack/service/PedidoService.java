@@ -11,6 +11,7 @@ public interface PedidoService {
     Pedido crearPedidoEnVivo(CrearPedidoEnVivoDTO dto);
     Pedido actualizar(Integer id, Pedido pedido);
     Pedido buscarPorId(Integer id);
+    Pedido buscarPorExternalId(String externalId);
     List<Pedido> buscarPorCliente(Long clienteId);
     List<Pedido> buscarPorEstado(EstadoPedido estado);
     Pedido actualizarEstado(Integer id, EstadoPedido nuevoEstado);
