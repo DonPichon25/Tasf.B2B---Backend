@@ -652,7 +652,152 @@ public class DataImportService {
         
         return result;
     }
-    
+    @Transactional
+    public Map<String, Object> importOrdersDiaDia(MultipartFile file, LocalDateTime horaInicio, LocalDateTime horaFin) {
+        Map<String, Object> result = new HashMap<>();
+        Path tempFile = null;
+        Path tempDir = null;
+
+        try {
+            log.info("📦 Iniciando importación de pedidos desde frontend...");
+            log.info("   Archivo: {} ({} MB)", file.getOriginalFilename(), file.getSize() / (1024.0 * 1024.0));
+
+            // 1. Verificar que existan aeropuertos en BD
+            List<Aeropuerto> aeropuertos=aeropuertoService.listar();
+            //Si es que hay aeropuertos de tipoData 0 entonces filtrar con esos
+            //List<Aeropuerto> aeropuertosArchivo = aeropuertoService.listartipoData(0);
+//            if(aeropuertosArchivo.isEmpty()){
+//                log.info("   Archivo de aeropuertos no subido, usando todos los aeropuertos en BD");
+//                aeropuertos = aeropuertoService.listartipoData(1);
+//            }else{
+//                log.info("   Usando aeropuertos importados desde archivo de aeropuertosinfo.txt");
+//                aeropuertos = aeropuertosArchivo;
+//            }
+            //Si no hay, entonces usar todos
+            if (aeropuertos.isEmpty()) {
+                result.put("success", false);
+                result.put("message", "Debe importar aeropuertos primero antes de importar pedidos");
+                result.put("count", 0);
+                log.warn("❌ No hay aeropuertos en BD. Importe aeropuertos primero.");
+                return result;
+            }
+
+            log.info("   Aeropuertos disponibles en BD: {}", aeropuertos.size());
+
+            // 2. Contar pedidos antes de importar
+//            int countAntes = pedidoService.listar().size();
+//            log.info("   Pedidos en BD antes de importar: {}", countAntes);
+
+            // 3. Guardar archivo temporal
+            tempFile = guardarArchivoTemporal(file);
+
+            // 4. DETECTAR FORMATO del archivo leyendo la primera línea
+            String primeraLinea = detectarFormatoArchivo(tempFile);
+            boolean esFormatoV2 = primeraLinea.contains("-") && primeraLinea.split("-").length >= 6;
+
+            if (esFormatoV2) {
+                log.info("   📋 Formato detectado: V2 (id-fecha-hora-dest-cant-cliente)");
+                log.info("   ⚠️ Archivo V2 detectado, usando LectorPedidosV2...");
+
+                if (horaInicio != null && horaFin != null) {
+                    log.info("   🕒 Filtrando pedidos por ventana de tiempo:");
+                    log.info("      Inicio: {}", horaInicio);
+                    log.info("      Fin: {}", horaFin);
+                } else {
+                    log.info("   📦 Cargando TODOS los pedidos del archivo (sin filtrado)");
+                }
+
+                // Crear directorio temporal y copiar archivo ahí
+                tempDir = Files.createTempDirectory("morapack-pedidos-");
+                Path archivoEnDir = tempDir.resolve(file.getOriginalFilename());
+                Files.copy(tempFile, archivoEnDir, StandardCopyOption.REPLACE_EXISTING);
+
+                // Usar LectorPedidosV2 que parsea fechas correctamente
+                LectorPedidosV2 lectorV2 = new LectorPedidosV2(
+                        tempDir.toString(),
+                        new ArrayList<>(aeropuertos),
+                        pedidoService,
+                        clienteService,
+                        batchService
+                );
+
+                // Cargar con filtros de tiempo si se especificaron
+                LectorPedidosV2.ResultadoCargaPedidos resultadoCarga =
+                        lectorV2.leerYGuardarPedidosDiaDia(horaInicio, horaFin);
+
+                if (!resultadoCarga.exito) {
+                    result.put("success", false);
+                    result.put("message", "Error cargando pedidos: " + resultadoCarga.mensajeError);
+                    result.put("count", 0);
+                    log.error("❌ {}", resultadoCarga.mensajeError);
+                    return result;
+                }
+
+                result.put("success", true);
+                result.put("message", "Pedidos importados exitosamente (Formato V2 con fechas)");
+                result.put("count", resultadoCarga.pedidosCreados);
+                result.put("pedidosCargados", resultadoCarga.pedidosCargados);
+                result.put("pedidosFiltrados", resultadoCarga.pedidosFiltrados);
+                result.put("erroresParseo", resultadoCarga.erroresParseo);
+
+                log.info("✅ {} pedidos importados (V2)", resultadoCarga.pedidosCreados);
+                log.info("   📊 Cargados: {}, Filtrados: {}, Errores: {}",
+                        resultadoCarga.pedidosCreados,
+                        resultadoCarga.pedidosFiltrados,
+                        resultadoCarga.erroresParseo);
+
+            } else {
+                log.info("   📋 Formato detectado: V1 (separado por espacios)");
+
+                // Usar LectorPedidos (formato viejo)
+                LectorPedidos lector = new LectorPedidos(
+                        tempFile.toString(),
+                        new ArrayList<>(aeropuertos),
+                        pedidoService,
+                        clienteService
+                );
+                lector.leerYGuardarProductos();
+
+                // 4. Contar pedidos después de importar
+                int countDespues = pedidoService.listar().size();
+                //int pedidosImportados = countDespues - countAntes;
+
+                log.info("   Pedidos en BD después de importar: {}", countDespues);
+
+                result.put("success", true);
+                result.put("message", "Pedidos importados exitosamente (Formato V1)");
+//                result.put("count", pedidosImportados);
+//
+//                log.info("✅ {} pedidos importados (V1)", pedidosImportados);
+            }
+
+        } catch (Exception e) {
+            log.error("❌ Error importando pedidos", e);
+            result.put("success", false);
+            result.put("message", "Error: " + e.getMessage());
+            result.put("error", e.getClass().getSimpleName());
+        } finally {
+            eliminarArchivoTemporal(tempFile);
+            if (tempDir != null) {
+                try {
+                    // Eliminar archivos dentro del directorio temporal
+                    Files.walk(tempDir)
+                            .sorted(Comparator.reverseOrder())
+                            .forEach(path -> {
+                                try {
+                                    Files.deleteIfExists(path);
+                                } catch (IOException e) {
+                                    log.warn("No se pudo eliminar archivo temporal: {}", path);
+                                }
+                            });
+                } catch (IOException e) {
+                    log.warn("Error limpiando directorio temporal: {}", e.getMessage());
+                }
+            }
+        }
+
+        return result;
+    }
     /**
      * Importa múltiples archivos de pedidos en batch
      * Procesa cada archivo secuencialmente y genera externalId único por archivo

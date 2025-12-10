@@ -79,6 +79,10 @@ public class AlnsRequestDTO {
             example = "true",
             defaultValue = "true")
     private Boolean habilitarUnitizacion;
+    @Schema(description = "Definir si es primera ventana o no",
+            example = "true",
+            defaultValue = "true")
+    private Boolean inicioOperacionDiaADia;
 
     @Schema(description = "Días de horizonte para planificación", 
             example = "4",
@@ -101,5 +105,12 @@ public class AlnsRequestDTO {
             deprecated = true,
             allowableValues = {"ARCHIVOS", "BASE_DE_DATOS"})
     private String fuente;
+    public Boolean getInicioOperacionDiaADia() {
+        return inicioOperacionDiaADia != null ? inicioOperacionDiaADia : Boolean.FALSE;
+    }
+
+    public void setInicioOperacionDiaADia(Boolean inicioOperacionDiaADia) {
+        this.inicioOperacionDiaADia = inicioOperacionDiaADia;
+    }
 }
 

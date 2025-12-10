@@ -2,9 +2,11 @@ package com.grupo5e.morapack.repository;
 
 import com.grupo5e.morapack.core.model.PlanViaje;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,7 +31,10 @@ public interface PlanViajeRepository extends JpaRepository<PlanViaje, Integer> {
      * Buscar planes por algoritmo usado
      */
     List<PlanViaje> findByAlgoritmoUsado(String algoritmoUsado);
-    
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM PlanViaje p WHERE p.fechaPlanificacion >= :desde")
+    int deleteByFechaPlanificacionFrom(@Param("desde") LocalDateTime desde);
     /**
      * Buscar planes en un rango de fechas
      */

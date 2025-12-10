@@ -123,12 +123,12 @@ public class LectorPedidosV2 {
             this.cacheClientes = obtenerTodosClientesMapeados(0);
             // Extraer código de aeropuerto del nombre
             // Ejemplo: _pedidos_SPIM_ -> SPIM o _pedidos_EBCI_.txt -> EBCI
-            String codigoAeropuertoDestino = nombreArchivo
-                    .replace("_pedidos_", "")
-                    .replace(".txt", "")
-                    .replace("_", "")
-                    .trim()
-                    .toUpperCase();
+//            String codigoAeropuertoDestino = nombreArchivo
+//                    .replace("_pedidos_", "")
+//                    .replace(".txt", "")
+//                    .replace("_", "")
+//                    .trim()
+//                    .toUpperCase();
 //
 //            Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(colocarAeropuertoPrincipalAleatorio(codigoAeropuertoDestino));
 //            if (aeropuertoOrigen == null) {
@@ -137,10 +137,98 @@ public class LectorPedidosV2 {
 //                continue;
 //            }
 
-            System.out.println("\nProcesando archivo: " + nombreArchivo + " (destino: " + codigoAeropuertoDestino + ")");
+            System.out.println("\nProcesando archivo: " + nombreArchivo );
 
             try {
                 procesarArchivoPedidos(archivo, horaInicioSimulacion, horaFinSimulacion, resultado);
+            } catch (Exception e) {
+                System.err.println("ERROR procesando archivo " + nombreArchivo + ": " + e.getMessage());
+                e.printStackTrace();
+                resultado.erroresArchivos++;
+            }
+        }
+
+        resultado.tiempoFin = LocalDateTime.now();
+        resultado.duracionSegundos = ChronoUnit.SECONDS.between(tiempoInicio, resultado.tiempoFin);
+        resultado.exito = resultado.erroresArchivos == 0 && resultado.pedidosCargados > 0;
+
+        System.out.println("\n========================================");
+        System.out.println("RESUMEN DE CARGA DE PEDIDOS");
+        System.out.println("Total de pedidos cargados: " + resultado.pedidosCargados);
+        System.out.println("Total de pedidos creados: " + resultado.pedidosCreados);
+        System.out.println("Pedidos filtrados (fuera de ventana): " + resultado.pedidosFiltrados);
+        System.out.println("Errores de parseo: " + resultado.erroresParseo);
+        System.out.println("Errores de archivos: " + resultado.erroresArchivos);
+        System.out.println("Duración: " + resultado.duracionSegundos + " segundos");
+        System.out.println("========================================");
+
+        return resultado;
+    }
+    public ResultadoCargaPedidos leerYGuardarPedidosDiaDia(
+            LocalDateTime horaInicioSimulacion,
+            LocalDateTime horaFinSimulacion) {
+
+        ResultadoCargaPedidos resultado = new ResultadoCargaPedidos();
+        File directorio = new File(directorioDatos);
+
+        if (!directorio.exists() || !directorio.isDirectory()) {
+            resultado.exito = false;
+            resultado.mensajeError = "Directorio no encontrado: " + directorioDatos;
+            System.err.println("ERROR: " + resultado.mensajeError);
+            return resultado;
+        }
+
+        // Buscar todos los archivos con patrón _pedidos_{AIRPORT}_ o _pedidos_{AIRPORT}_.txt
+        File[] archivosPedidos = directorio.listFiles((dir, nombre) ->
+                nombre.startsWith("_pedidos_") &&
+                        (nombre.endsWith("_") || nombre.endsWith("_.txt") || nombre.endsWith(".txt"))
+        );
+
+        if (archivosPedidos == null || archivosPedidos.length == 0) {
+            resultado.exito = false;
+            resultado.mensajeError = "No se encontraron archivos con patrón _pedidos_{AIRPORT}_";
+            System.err.println("WARNING: " + resultado.mensajeError);
+            return resultado;
+        }
+
+        System.out.println("========================================");
+        System.out.println("CARGANDO PEDIDOS DESDE ARCHIVOS V2");
+        System.out.println("Directorio: " + directorioDatos);
+        System.out.println("Archivos encontrados: " + archivosPedidos.length);
+        if (horaInicioSimulacion != null && horaFinSimulacion != null) {
+            System.out.println("Ventana de tiempo: " + horaInicioSimulacion + " a " + horaFinSimulacion);
+        } else {
+            System.out.println("Ventana de tiempo: TODOS LOS PEDIDOS (sin filtrado)");
+        }
+        System.out.println("========================================");
+
+        LocalDateTime tiempoInicio = LocalDateTime.now();
+
+
+        // Procesar cada archivo
+        for (File archivo : archivosPedidos) {
+            String nombreArchivo = archivo.getName();
+            this.cacheClientes = obtenerTodosClientesMapeados(1);
+            // Extraer código de aeropuerto del nombre
+            // Ejemplo: _pedidos_SPIM_ -> SPIM o _pedidos_EBCI_.txt -> EBCI
+//            String codigoAeropuertoDestino = nombreArchivo
+//                    .replace("_pedidos_", "")
+//                    .replace(".txt", "")
+//                    .replace("_", "")
+//                    .trim()
+//                    .toUpperCase();
+//
+//            Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(colocarAeropuertoPrincipalAleatorio(codigoAeropuertoDestino));
+//            if (aeropuertoOrigen == null) {
+//                System.err.println("WARNING: Aeropuerto origen desconocido: " + codigoAeropuertoDestino + " en " + nombreArchivo);
+//                resultado.erroresArchivos++;
+//                continue;
+//            }
+
+            System.out.println("\nProcesando archivo: " + nombreArchivo );
+
+            try {
+                procesarArchivoPedidosDiaDia(archivo, horaInicioSimulacion, horaFinSimulacion, resultado);
             } catch (Exception e) {
                 System.err.println("ERROR procesando archivo " + nombreArchivo + ": " + e.getMessage());
                 e.printStackTrace();
@@ -171,7 +259,110 @@ public class LectorPedidosV2 {
                 c -> c
         ));
     }
+    private void procesarArchivoPedidosDiaDia(
+            File archivo,
+            LocalDateTime horaInicio,
+            LocalDateTime horaFin,
+            ResultadoCargaPedidos resultado) throws IOException {
 
+//        System.out.println("  📂 Procesando archivo Día a Día: " + archivo.getName());
+//        System.out.println("  🕒 Ventana temporal: " + horaInicio + " a " + horaFin);
+
+        int i=1;
+        try (BufferedReader reader = new BufferedReader(new FileReader(archivo))) {
+            String linea;
+            int numeroLinea = 0;
+            List<Pedido> pedidosPorCrear = new ArrayList<>();
+            int pedidosAgregadosALista = 0;
+
+            while ((linea = reader.readLine()) != null) {
+                numeroLinea++;
+                linea = linea.trim();
+
+                if (linea.isEmpty()) {
+                    continue;
+                }
+
+                try {
+                    Pedido pedido = parsearLineaPedidoDiaDia(linea);
+                    // ✅ Si retorna null, es un duplicado
+                    if (pedido == null) {
+                        resultado.pedidosFiltrados++;
+                        System.out.println("  ⏩ Línea " + numeroLinea + ": Pedido duplicado filtrado");
+                        continue;
+                    }
+                    resultado.pedidosCargados++;
+                    System.out.println("  ✅ Línea " + numeroLinea + ": Pedido parseado: " + pedido.getNombre());
+                    i++;
+
+                    // Filtrar por ventana de tiempo si se especificó
+                    if (horaInicio != null && horaFin != null) {
+                        if (pedido.getFechaPedido().isBefore(horaInicio) ||
+                                pedido.getFechaPedido().isAfter(horaFin)) {
+                            resultado.pedidosFiltrados++;
+                            System.out.println("  ⏩ Pedido fuera de ventana temporal: " + pedido.getNombre() +
+                                             " (Fecha: " + pedido.getFechaPedido() + ")");
+                            continue;
+                        }
+                    }
+
+                    pedidosPorCrear.add(pedido);
+                    pedidosAgregadosALista++;
+                    System.out.println("  ➕ Pedido agregado a lista de creación: " + pedido.getNombre() +
+                                     " (Total en lista: " + pedidosPorCrear.size() + ")");
+
+                    // OPTIMIZACIÓN: Guardar clientes cada 1000 pedidos para evitar problemas de flush
+                    if (clientesNuevosPendientes.size() >= 1000) {
+                        System.out.println("  🔄 Límite de clientes alcanzado (" + clientesNuevosPendientes.size() + "), guardando...");
+                        guardarClientesPendientes();
+                    }
+
+                    // 🚀 OPTIMIZADO: Lotes de 500 para mejor aprovechamiento del batch
+                    if (pedidosPorCrear.size() >= 500) {
+                        System.out.println("  🚀 Límite de lote alcanzado (500 pedidos), guardando batch...");
+
+                        // CRÍTICO: Guardar clientes pendientes ANTES de guardar pedidos
+                        if (!clientesNuevosPendientes.isEmpty()) {
+                            System.out.println("  📝 Guardando " + clientesNuevosPendientes.size() + " clientes pendientes antes del batch...");
+                            guardarClientesPendientes();
+                        }
+
+                        System.out.println("  💾 Guardando lote de " + pedidosPorCrear.size() + " pedidos...");
+                        guardarLotePedidos(pedidosPorCrear, resultado);
+                        pedidosPorCrear.clear();
+                        System.out.println("  ✅ Lote guardado, lista limpiada");
+                    }
+
+                } catch (Exception e) {
+                    resultado.erroresParseo++;
+                    System.err.println("  ❌ Error parseando línea " + numeroLinea + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+            }
+
+            System.out.println("\n  📊 RESUMEN DE LECTURA:");
+            System.out.println("     - Líneas procesadas: " + numeroLinea);
+            System.out.println("     - Pedidos agregados a lista: " + pedidosAgregadosALista);
+            System.out.println("     - Pedidos en lista final: " + pedidosPorCrear.size());
+            System.out.println("     - Clientes pendientes: " + clientesNuevosPendientes.size());
+
+            // CRÍTICO: Guardar clientes ANTES de los pedidos restantes
+            if (!clientesNuevosPendientes.isEmpty()) {
+                System.out.println("\n  💾 Guardando " + clientesNuevosPendientes.size() + " clientes pendientes finales...");
+                guardarClientesPendientes();
+            }
+
+            // Guardar pedidos restantes
+            if (!pedidosPorCrear.isEmpty()) {
+                System.out.println("  💾 Guardando " + pedidosPorCrear.size() + " pedidos restantes...");
+                guardarLotePedidos(pedidosPorCrear, resultado);
+            } else {
+                System.out.println("  ℹ️ No hay pedidos restantes para guardar");
+            }
+
+            System.out.println("  ✅ Procesamiento del archivo completado");
+        }
+    }
     private void procesarArchivoPedidos(
             File archivo,
             LocalDateTime horaInicio,
@@ -242,15 +433,12 @@ public class LectorPedidosV2 {
             System.out.println("  Líneas procesadas: " + numeroLinea);
         }
     }
+    private Pedido parsearLineaPedidoDiaDia(String linea) {
+        //System.out.println("  📖 [DIA_A_DIA] Parseando línea: " + linea);
 
-    /**
-     * Parsea una línea del archivo en formato V2
-     * Formato: id_pedido-aaaammdd-hh-mm-dest-###-IdClien
-     * Ejemplo: 000000001-20250102-01-18-SPIM-003-0027081
-     */
-    private Pedido parsearLineaPedido(String linea) {
         String[] partes = linea.split("-");
         if (partes.length != 7) {
+            System.err.println("  ❌ [DIA_A_DIA] Formato inválido: esperado 7 campos, encontrado " + partes.length);
             throw new IllegalArgumentException("Formato inválido: esperado 7 campos, encontrado " + partes.length);
         }
 
@@ -263,11 +451,30 @@ public class LectorPedidosV2 {
         int cantidadProductos = Integer.parseInt(partes[5]);
         String idClienteStr = partes[6];
 
+//        System.out.println("  📦 [DIA_A_DIA] Datos parseados:");
+//        System.out.println("     - ID Pedido: " + idPedidoStr);
+//        System.out.println("     - Fecha: " + fechaStr + " | Hora: " + hora + ":" + minuto);
+//        System.out.println("     - Destino: " + codigoAeropuertoDestino);
+//        System.out.println("     - Cantidad productos: " + cantidadProductos);
+//        System.out.println("     - ID Cliente: " + idClienteStr);
+
+        // ✅ VERIFICAR DUPLICADOS: Generar externalId y comprobar existencia
+        String externalId = codigoAeropuertoDestino + "-" + idPedidoStr;
+        //System.out.println("     - ExternalId generado: " + externalId);
+
+        Pedido pedidoExistente = pedidoService.buscarPorExternalId(externalId);
+        if (pedidoExistente != null) {
+            // Pedido ya existe, retornar null para omitirlo
+            System.out.println("  ⚠️ [DIA_A_DIA] Pedido duplicado omitido: " + externalId);
+            return null;
+        }
+
         // Parsear fecha (aaaammdd -> LocalDateTime)
         int anio = Integer.parseInt(fechaStr.substring(0, 4));
         int mes = Integer.parseInt(fechaStr.substring(4, 6));
         int dia = Integer.parseInt(fechaStr.substring(6, 8));
         LocalDateTime fechaPedido = LocalDateTime.of(anio, mes, dia, hora, minuto, 0);
+        //System.out.println("     - Fecha parseada: " + fechaPedido);
 
         // Buscar aeropuerto origen (asumido como aeropuerto principal aleatorio)
         Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(colocarAeropuertoPrincipalAleatorio(codigoAeropuertoDestino));
@@ -285,15 +492,15 @@ public class LectorPedidosV2 {
         LocalDateTime fechaLimiteEntrega = fechaPedido.plusDays(3);
 
         // Obtener o crear cliente
-        Cliente cliente = obtenerOCrearCliente(idClienteStr, aeropuertoDestino.getCiudad());
+        Cliente cliente = obtenerOCrearCliente(idClienteStr, aeropuertoDestino.getCiudad(),1);
 
         // Crear pedido
         Pedido pedido = new Pedido();
-        
+
         // Generar externalId compuesto: {AIRPORT_ORIGIN}-{FILE_ORDER_ID}
-        String externalId = aeropuertoDestino.getCodigoIATA() + "-" + idPedidoStr;
+        //String externalId = aeropuertoDestino.getCodigoIATA() + "-" + idPedidoStr;
         pedido.setExternalId(externalId);
-        
+
         pedido.setNombre("PEDIDO-" + idPedidoStr + "-" + codigoAeropuertoDestino);
         pedido.setCliente(cliente);
         pedido.setAeropuertoOrigenCodigo(aeropuertoOrigen.getCodigoIATA());
@@ -310,7 +517,85 @@ public class LectorPedidosV2 {
         pedido.setCantidadProductos(cantidadProductos);
 
         // Crear productos
-        ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido);
+        ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido,1);
+        pedido.setProductos(productos);
+
+        pedido.setTipoData(1);
+        //System.out.println("  ✅ [DIA_A_DIA] Pedido creado exitosamente: " + pedido.getNombre() + " (ExternalId: " + externalId + ")");
+        return pedido;
+    }
+    /**
+     * Parsea una línea del archivo en formato V2
+     * Formato: id_pedido-aaaammdd-hh-mm-dest-###-IdClien
+     * Ejemplo: 000000001-20250102-01-18-SPIM-003-0027081
+     */
+    private Pedido parsearLineaPedido(String linea) {
+
+        String[] partes = linea.split("-");
+        if (partes.length != 7) {
+            System.err.println("  ❌ [NORMAL] Formato inválido: esperado 7 campos, encontrado " + partes.length);
+            throw new IllegalArgumentException("Formato inválido: esperado 7 campos, encontrado " + partes.length);
+        }
+
+        // Parsear campos
+        String idPedidoStr = partes[0];
+        String fechaStr = partes[1];  // aaaammdd
+        int hora = Integer.parseInt(partes[2]);
+        int minuto = Integer.parseInt(partes[3]);
+        String codigoAeropuertoDestino = partes[4].trim().toUpperCase();
+        int cantidadProductos = Integer.parseInt(partes[5]);
+        String idClienteStr = partes[6];
+
+        // Parsear fecha (aaaammdd -> LocalDateTime)
+        int anio = Integer.parseInt(fechaStr.substring(0, 4));
+        int mes = Integer.parseInt(fechaStr.substring(4, 6));
+        int dia = Integer.parseInt(fechaStr.substring(6, 8));
+        LocalDateTime fechaPedido = LocalDateTime.of(anio, mes, dia, hora, minuto, 0);
+        //System.out.println("     - Fecha parseada: " + fechaPedido);
+
+        // Buscar aeropuerto origen (asumido como aeropuerto principal aleatorio)
+        Aeropuerto aeropuertoOrigen = mapaAeropuertos.get(colocarAeropuertoPrincipalAleatorio(codigoAeropuertoDestino));
+        if (aeropuertoOrigen == null) {
+            throw new IllegalArgumentException("Aeropuerto origen desconocido para destino: " + codigoAeropuertoDestino);
+        }
+        // Buscar aeropuerto destino
+        Aeropuerto aeropuertoDestino = mapaAeropuertos.get(codigoAeropuertoDestino);
+        if (aeropuertoDestino == null) {
+            throw new IllegalArgumentException("Aeropuerto destino desconocido: " + codigoAeropuertoDestino);
+        }
+
+        // Calcular plazo de entrega (regla simple: +3 días)
+        // TODO: Implementar lógica basada en continentes como en el Backend
+        LocalDateTime fechaLimiteEntrega = fechaPedido.plusDays(3);
+
+        // Obtener o crear cliente
+        Cliente cliente = obtenerOCrearCliente(idClienteStr, aeropuertoDestino.getCiudad(),0);
+
+        // Crear pedido
+        Pedido pedido = new Pedido();
+        
+        // Generar externalId compuesto: {AIRPORT_ORIGIN}-{FILE_ORDER_ID}
+        String externalId = aeropuertoDestino.getCodigoIATA() + "-" + idPedidoStr;
+        pedido.setExternalId(externalId);
+        //System.out.println("     - ExternalId generado: " + externalId);
+
+        pedido.setNombre("PEDIDO-" + idPedidoStr + "-" + codigoAeropuertoDestino);
+        pedido.setCliente(cliente);
+        pedido.setAeropuertoOrigenCodigo(aeropuertoOrigen.getCodigoIATA());
+        pedido.setAeropuertoDestinoCodigo(aeropuertoDestino.getCodigoIATA());
+        pedido.setFechaPedido(fechaPedido);
+        pedido.setFechaLimiteEntrega(fechaLimiteEntrega);
+        pedido.setEstado(EstadoPedido.PENDIENTE);
+
+        // Calcular prioridad
+        double prioridad = calcularPrioridad(fechaPedido, fechaLimiteEntrega);
+        pedido.setPrioridad(prioridad);
+
+        // ⚠️ CRÍTICO: Sincronizar cantidadProductos ANTES de crear productos
+        pedido.setCantidadProductos(cantidadProductos);
+
+        // Crear productos
+        ArrayList<Producto> productos = crearProductos(cantidadProductos, pedido,0);
         pedido.setProductos(productos);
 
         pedido.setTipoData(0);
@@ -326,22 +611,62 @@ public class LectorPedidosV2 {
         }
         
         System.out.println("  💾 Guardando " + clientesNuevosPendientes.size() + " clientes nuevos en batch...");
+
+        // 🔍 DETECTAR DUPLICADOS EN LA LISTA antes de insertar
+        Map<UsuarioId, Cliente> clientesUnicos = new LinkedHashMap<>();
+        for (Cliente cliente : clientesNuevosPendientes) {
+            UsuarioId key = cliente.getUsuarioId();
+            if (clientesUnicos.containsKey(key)) {
+                System.out.println("  ⚠️ Cliente duplicado en lista detectado: " + key + " - Se omite");
+            } else {
+                clientesUnicos.put(key, cliente);
+            }
+        }
+
+        if (clientesUnicos.isEmpty()) {
+            System.out.println("  ⚠️ No hay clientes únicos para insertar después de eliminar duplicados");
+            clientesNuevosPendientes.clear();
+            return;
+        }
+
+        List<Cliente> clientesUnicosLista = new ArrayList<>(clientesUnicos.values());
+        System.out.println("  📊 Clientes únicos a insertar: " + clientesUnicosLista.size() +
+                           " (duplicados eliminados: " + (clientesNuevosPendientes.size() - clientesUnicosLista.size()) + ")");
+
         try {
-            List<Cliente> clientesGuardados = clienteService.insertarBulk(clientesNuevosPendientes);
-            
+            List<Cliente> clientesGuardados = clienteService.insertarBulk(clientesUnicosLista);
+
             // CRÍTICO: Actualizar caché con las instancias PERSISTIDAS retornadas por JPA
-            // Esto es importante porque las instancias persistidas son "managed" por JPA
-            // y tienen el estado correcto de la BD
             for (Cliente clientePersistido : clientesGuardados) {
-                // Reemplazar en caché la instancia transient con la instancia persistida
                 cacheClientes.put(clientePersistido.getUsuarioId(), clientePersistido);
             }
             
             System.out.println("  ✅ " + clientesGuardados.size() + " clientes guardados y caché actualizado");
         } catch (Exception e) {
             System.err.println("  ❌ Error guardando clientes en batch: " + e.getMessage());
-            e.printStackTrace();
-            // En caso de error, también limpiar la lista para evitar reintentos con datos inconsistentes
+            System.err.println("  📝 Intentando guardar clientes uno por uno para identificar el problema...");
+
+            // Fallback: Intentar guardar uno por uno
+            int exitosos = 0;
+            int fallidos = 0;
+            for (Cliente cliente : clientesUnicosLista) {
+                try {
+                    // El método insertar del servicio retorna Long (el ID), no Cliente
+                    Long idGuardado = clienteService.insertar(cliente);
+                    if (idGuardado != null) {
+                        // Buscar el cliente persistido en BD para actualizar el caché
+                        Cliente clientePersistido = clienteService.buscarPorId(cliente.getUsuarioId().getId(), cliente.getUsuarioId().getTipoData());
+                        if (clientePersistido != null) {
+                            cacheClientes.put(clientePersistido.getUsuarioId(), clientePersistido);
+                        }
+                        exitosos++;
+                    }
+                } catch (Exception ex) {
+                    fallidos++;
+                    System.err.println("  ❌ Error guardando cliente " + cliente.getUsuarioId() + ": " + ex.getMessage());
+                }
+            }
+            System.out.println("  📊 Resultado fallback: " + exitosos + " exitosos, " + fallidos + " fallidos");
         }
         clientesNuevosPendientes.clear();
     }
@@ -350,10 +675,10 @@ public class LectorPedidosV2 {
      * Obtiene o crea un cliente con caché para evitar búsquedas repetidas
      * OPTIMIZADO: Acumula clientes nuevos para guardarlos en batch antes de los pedidos
      */
-    private Cliente obtenerOCrearCliente(String idClienteStr, Ciudad ciudadRecojo) {
+    private Cliente obtenerOCrearCliente(String idClienteStr, Ciudad ciudadRecojo, Integer tipo) {
 
         // Key compuesto
-        UsuarioId key = new UsuarioId(Long.parseLong(idClienteStr), 0);
+        UsuarioId key = new UsuarioId(Long.parseLong(idClienteStr), tipo);
 
         // Verificar caché primero
         if (cacheClientes.containsKey(key)) {
@@ -376,7 +701,7 @@ public class LectorPedidosV2 {
         Cliente nuevoCliente = new Cliente();
         UsuarioId usuarioId = new UsuarioId();
         usuarioId.setId(idCliente);
-        usuarioId.setTipoData(0);
+        usuarioId.setTipoData(tipo);
         nuevoCliente.setUsuarioId(usuarioId);
         nuevoCliente.setNombres("Cliente " + idCliente);
         nuevoCliente.setCorreo("cliente" + idCliente + "@morapack.com");
@@ -395,7 +720,7 @@ public class LectorPedidosV2 {
         return nuevoCliente;
     }
 
-    private ArrayList<Producto> crearProductos(int cantidad, Pedido pedido) {
+    private ArrayList<Producto> crearProductos(int cantidad, Pedido pedido, int tipo) {
         ArrayList<Producto> productos = new ArrayList<>();
         for (int i = 0; i < cantidad; i++) {
             Producto producto = new Producto();
@@ -404,7 +729,7 @@ public class LectorPedidosV2 {
             producto.setVolumen(1.0);  // Volumen por defecto
             producto.setEstado(EstadoProducto.EN_ALMACEN);
             producto.setPedido(pedido);
-            producto.setTipoData(0);
+            producto.setTipoData(tipo);
             productos.add(producto);
         }
         return productos;

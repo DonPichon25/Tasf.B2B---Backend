@@ -8,12 +8,12 @@ import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.api.mapper.VueloMapper;
 import com.grupo5e.morapack.core.enums.EstadoProducto;
 import com.grupo5e.morapack.core.enums.EstadoVuelo;
-import com.grupo5e.morapack.core.model.Pedido;
-import com.grupo5e.morapack.core.model.Producto;
-import com.grupo5e.morapack.core.model.Vuelo;
+import com.grupo5e.morapack.core.model.*;
+import com.grupo5e.morapack.repository.InstanciaVueloRepository;
+import com.grupo5e.morapack.repository.PlanViajeRepository;
 import com.grupo5e.morapack.repository.ProductoRepository;
-import com.grupo5e.morapack.service.PedidoService;
-import com.grupo5e.morapack.service.ProductoService;
+import com.grupo5e.morapack.repository.SegmentoVueloRepository;
+import com.grupo5e.morapack.service.CancelacionService;
 import com.grupo5e.morapack.service.VueloService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,14 +24,13 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -43,12 +42,315 @@ public class VueloController {
     private final VueloService vueloService;
     private final VueloMapper vueloMapper;
     private final ProductoRepository productoRepository;
+    private final InstanciaVueloRepository instanciaVueloRepository;
+    private final CancelacionService cancelacionService;
+    private final SegmentoVueloRepository segmentoVueloRepository;
+    private final PlanViajeRepository planViajeRepository;
 
     public VueloController(VueloService vueloService, VueloMapper vueloMapper,
-            ProductoRepository productoRepository) {
+                           ProductoRepository productoRepository,
+                           InstanciaVueloRepository instanciaVueloRepository,
+                           CancelacionService cancelacionService, SegmentoVueloRepository segmentoVueloRepository,
+                           PlanViajeRepository planViajeRepository) {
         this.vueloService = vueloService;
         this.vueloMapper = vueloMapper;
         this.productoRepository = productoRepository;
+        this.instanciaVueloRepository = instanciaVueloRepository;
+        this.cancelacionService = cancelacionService;
+        this.segmentoVueloRepository = segmentoVueloRepository;
+        this.planViajeRepository = planViajeRepository;
+    }
+    /**
+     * Cancela una instancia de vuelo concreta (FL-...-yyyyMMdd-HHmm)
+     * usando SegmentoVuelo para determinar los pedidos y productos afectados.
+     */
+    @Operation(
+            summary = "Cancelar instancia de vuelo y reinsertar productos",
+            description = "Cancela una instancia específica de vuelo (no el vuelo base) siempre que aún no haya despegado."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Resultado de la cancelación",
+                    content = @Content(schema = @Schema(implementation = ResultadoCancelacionDTO.class))),
+            @ApiResponse(responseCode = "404", description = "Instancia no encontrada",
+                    content = @Content(schema = @Schema(implementation = ErrorResponseDTO.class)))
+    })
+    @PostMapping("/instancias/{idInstancia}/cancelar-y-reasignar")
+    public ResponseEntity<ResultadoCancelacionDTO> cancelarInstanciaDeVuelo(
+            @PathVariable String idInstancia,
+            @RequestParam("tiempoSimulacionActual")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime tiempoSimulacionActual
+    ) {
+        log.info("✈️ [CANCELAR] Solicitud para cancelar instancia {} en tiempoSimulacionActual={}",
+                idInstancia, tiempoSimulacionActual);
+
+        // --------------------------------------------------------------------
+        // 0) Buscar instancia
+        // --------------------------------------------------------------------
+        InstanciaVuelo instancia = instanciaVueloRepository.findById(idInstancia)
+                .orElse(null);
+        Vuelo vueloBase=instancia.getVueloBase();
+        if (instancia == null) {
+            log.warn("❌ [CANCELAR] Instancia {} no encontrada", idInstancia);
+            ResultadoCancelacionDTO dto = ResultadoCancelacionDTO.builder()
+                    .exitoso(false)
+                    .mensaje("Instancia de vuelo no encontrada")
+                    .idInstancia(idInstancia)
+                    .build();
+            return ResponseEntity.ok(dto);
+        }
+
+        log.info("✈️ [CANCELAR] Instancia encontrada: vueloBaseId={}, salida={}, estado={}",
+                instancia.getVueloBase().getId(),
+                instancia.getFechaHoraSalida(),
+                instancia.getEstadoInstancia());
+
+        // --------------------------------------------------------------------
+        // 1) Validar estado actual de la instancia
+        // --------------------------------------------------------------------
+        if ("CANCELADA".equalsIgnoreCase(instancia.getEstadoInstancia())) {
+            log.info("ℹ️ [CANCELAR] Instancia {} ya estaba CANCELADA", idInstancia);
+            ResultadoCancelacionDTO dto = ResultadoCancelacionDTO.builder()
+                    .exitoso(false)
+                    .mensaje("La instancia ya estaba cancelada")
+                    .idInstancia(idInstancia)
+                    .vueloBaseId(instancia.getVueloBase().getId())
+                    .build();
+            return ResponseEntity.ok(dto);
+        }
+
+        if ("FINALIZADA".equalsIgnoreCase(instancia.getEstadoInstancia())) {
+            log.info("ℹ️ [CANCELAR] Instancia {} ya está FINALIZADA, no se puede cancelar", idInstancia);
+            ResultadoCancelacionDTO dto = ResultadoCancelacionDTO.builder()
+                    .exitoso(false)
+                    .mensaje("El vuelo ya fue finalizado, no se puede cancelar")
+                    .idInstancia(idInstancia)
+                    .vueloBaseId(instancia.getVueloBase().getId())
+                    .build();
+            return ResponseEntity.ok(dto);
+        }
+
+        // --------------------------------------------------------------------
+        // 2) Validar que aún no haya despegado
+        // --------------------------------------------------------------------
+        // Ajustar tiempoSimulacionActual restando 5 horas (UTC-5)
+        //LocalDateTime tiempoSimulacionAjustado = tiempoSimulacionActual.minusHours(5);
+
+        log.info("⏱️ [CANCELAR] tiempoSimulacionActual={} vs salidaInstancia={}",
+                tiempoSimulacionActual, instancia.getFechaHoraSalida());
+
+        if (!tiempoSimulacionActual.isBefore(instancia.getFechaHoraSalida())) {
+            // tiempoSimulacionActual >= fechaHoraSalida
+            log.warn("❌ [CANCELAR] El vuelo ya despegó según tiempo de simulación, no se cancela.");
+            ResultadoCancelacionDTO dto = ResultadoCancelacionDTO.builder()
+                    .exitoso(false)
+                    .mensaje("El vuelo ya despegó, no puede ser cancelado.")
+                    .idInstancia(idInstancia)
+                    .vueloBaseId(instancia.getVueloBase().getId())
+                    .build();
+            return ResponseEntity.ok(dto);
+        }
+
+        // --------------------------------------------------------------------
+        // 3) Buscar los segmentos que usan ESTA instancia
+        //     (misma vueloBase + misma fechaHoraSalida)
+        // --------------------------------------------------------------------
+        List<SegmentoVuelo> segmentosDeInstancia =
+                segmentoVueloRepository.findByVueloAndHoraSalidaExacta(
+                        instancia.getVueloBase().getId(),
+                        instancia.getFechaHoraSalida()
+                );
+
+        if (segmentosDeInstancia.isEmpty()) {
+            log.info("ℹ️ [CANCELAR] No hay SegmentoVuelo asociados a la instancia {}, nada que replanificar.",
+                    idInstancia);
+
+            instancia.setEstadoInstancia("CANCELADA");
+            instanciaVueloRepository.save(instancia);
+
+            ResultadoCancelacionDTO dto = ResultadoCancelacionDTO.builder()
+                    .exitoso(true)
+                    .mensaje("Instancia cancelada, pero no había segmentos asociados.")
+                    .idInstancia(idInstancia)
+                    .vueloBaseId(instancia.getVueloBase().getId())
+                    .build();
+            return ResponseEntity.ok(dto);
+        }
+
+        log.info("✈️ [CANCELAR] Segmentos afectados en esta instancia: {}",
+                segmentosDeInstancia.size());
+
+        // --------------------------------------------------------------------
+        // 4) Reunir los PlanViaje afectados
+        // --------------------------------------------------------------------
+        Set<PlanViaje> planesAfectados = new HashSet<>();
+        for (SegmentoVuelo seg : segmentosDeInstancia) {
+            PlanViaje plan = seg.getPlanViaje();
+            if (plan != null) {
+                planesAfectados.add(plan);
+            }
+        }
+
+        log.info("✈️ [CANCELAR] Planes de viaje afectados: {}", planesAfectados.size());
+
+        // Cache local de instancias que vamos modificando
+        //  clave: vueloId|fechaHoraSalida
+        Map<String, InstanciaVuelo> instanciasModificadas = new HashMap<>();
+
+        int totalCapacidadLiberada = 0;
+        int totalSegmentosAfectados = 0;
+
+        // --------------------------------------------------------------------
+        // 5) Para cada PlanViaje afectado:
+        //    - liberamos capacidad en TODAS las instancias de SUS segmentos
+        //      (incluyendo escalas)
+        //    - marcamos el PlanViaje como CANCELADO
+        // --------------------------------------------------------------------
+        for (PlanViaje plan : planesAfectados) {
+            if (plan.getSegmentosVuelo() == null || plan.getSegmentosVuelo().isEmpty()) {
+                continue;
+            }
+
+            log.info("🧭 [CANCELAR] Procesando PlanViaje id={} con {} segmentos",
+                    plan.getId(), plan.getSegmentosVuelo().size());
+
+            for (SegmentoVuelo segPlan : plan.getSegmentosVuelo()) {
+                if (segPlan.getVuelo() == null || segPlan.getHoraSalidaEstimada() == null) {
+                    continue;
+                }
+
+                // ✅ VALIDACIÓN CRÍTICA: Solo liberar capacidad de segmentos POSTERIORES o IGUALES
+                // a la instancia cancelada
+                if (segPlan.getHoraSalidaEstimada().isBefore(instancia.getFechaHoraSalida())) {
+                    log.info("⏭️ [CANCELAR]   Segmento segId={} con salida {} es ANTERIOR a la instancia a cancelar {}. NO se libera capacidad.",
+                            segPlan.getId(),
+                            segPlan.getHoraSalidaEstimada(),
+                            instancia.getFechaHoraSalida());
+                    continue;
+                }
+
+                if (segPlan.getPedido() == null || segPlan.getPedido().getCantidadProductos() == 0) {
+                    log.warn("⚠️ [CANCELAR]   Segmento segId={} sin pedido o sin cantidadProductos, se omite",
+                            segPlan.getId());
+                    continue;
+                }
+
+                int cantidadPedido = segPlan.getPedido().getCantidadProductos();
+                if (cantidadPedido <= 0) {
+                    log.info("ℹ️ [CANCELAR]   Segmento segId={} tiene cantidadProductos={} (<=0), no libera capacidad",
+                            segPlan.getId(), cantidadPedido);
+                    continue;
+                }
+                Integer vueloId = segPlan.getVuelo().getId();
+                LocalDateTime salidaSegmento = segPlan.getHoraSalidaEstimada();
+
+                // clave de cache local
+                String cacheKey = vueloId + "|" + salidaSegmento.toString();
+
+
+                InstanciaVuelo instanciaSeg = instanciasModificadas.computeIfAbsent(
+                        cacheKey,
+                        k -> {
+                            InstanciaVuelo inst = instanciaVueloRepository
+                                    .findByVueloBase_IdAndFechaHoraSalida(vueloId, salidaSegmento)
+                                    .orElse(null);
+                            log.info("📦 [CANCELAR]   Cacheando instancia para key={} vueloId={} salida={} -> encontrada={}",
+                                    k, vueloId, salidaSegmento, (inst != null));
+                            return inst;
+                        }
+                );
+
+                if (instanciaSeg == null) {
+                    log.warn("⚠️ [CANCELAR]   No se encontró InstanciaVuelo para vueloId={} salida={}, segmento segId={}",
+                            vueloId, salidaSegmento, segPlan.getId());
+                    continue;
+                }
+
+                Integer usadosActual = Optional.ofNullable(instanciaSeg.getCapacidadUsada()).orElse(0);
+                Integer prodActual = Optional.ofNullable(instanciaSeg.getProductosAsignados()).orElse(0);
+
+                int nuevosUsados = usadosActual - segPlan.getCapacidadReservada();
+                if (nuevosUsados < 0) {
+                    log.warn("⚠️ [CANCELAR]   Capacidad negativa en instancia {}. usadosActual={} liberar={} -> ajustando a 0",
+                            instanciaSeg.getIdInstancia(), usadosActual, cantidadPedido);
+                    nuevosUsados = 0;
+                }
+
+                log.info("📊 [CANCELAR]   Instancia {} ANTES: usados={}, productosAsignados={}. Liberando {} unidades.",
+                        instanciaSeg.getIdInstancia(), usadosActual, prodActual, cantidadPedido);
+
+                instanciaSeg.setCapacidadUsada(nuevosUsados);
+                instanciaSeg.setProductosAsignados(nuevosUsados);
+
+                log.info("📊 [CANCELAR]   Instancia {} DESPUÉS: usados={}, productosAsignados={}",
+                        instanciaSeg.getIdInstancia(),
+                        instanciaSeg.getCapacidadUsada(),
+                        instanciaSeg.getProductosAsignados());
+                    totalCapacidadLiberada += segPlan.getPedido().getCantidadProductos();
+                    totalSegmentosAfectados++;
+                //}
+            }
+
+            // Toda la ruta de ese pedido/producto queda inválida
+            plan.setEstado("CANCELADO");
+        }
+
+        // --------------------------------------------------------------------
+        // 6) Marcar la instancia directamente cancelada
+        // --------------------------------------------------------------------
+        instancia.setEstadoInstancia("CANCELADO");
+        String keyInstanciaPrincipal = instancia.getVueloBase().getId() + "|" + instancia.getFechaHoraSalida();
+        instanciasModificadas.put(keyInstanciaPrincipal, instancia);
+
+        // --------------------------------------------------------------------
+        // 7) Persistir cambios
+        // --------------------------------------------------------------------
+        planViajeRepository.saveAll(planesAfectados);
+        instanciaVueloRepository.save(instancia);
+        if (!instanciasModificadas.isEmpty()) {
+            log.info("💾 [CANCELAR] Guardando {} instancias de vuelo modificadas",
+                    instanciasModificadas.size());
+            instanciaVueloRepository.saveAll(instanciasModificadas.values());
+        }
+        Cancelacion cancelacion = new Cancelacion();
+        cancelacion.setDiasCancelado(1);
+        cancelacion.setCodigoIATAOrigen(vueloBase.getAeropuertoOrigen().getCodigoIATA());
+        cancelacion.setCodigoIATADestino(vueloBase.getAeropuertoDestino().getCodigoIATA());
+        cancelacion.setHora(instancia.getFechaHoraSalida().getHour());
+        cancelacion.setMinuto(instancia.getFechaHoraSalida().getMinute());
+        cancelacion.setFechaHoraCancelacion(tiempoSimulacionActual);
+        cancelacion.setVuelo(vueloBase);
+
+        try {
+            cancelacionService.insertar(cancelacion);
+            log.info("Cancelación registrada en BD: {} -> {} a las {}:{} del día {}",
+                    cancelacion.getCodigoIATAOrigen(),
+                    cancelacion.getCodigoIATADestino(),
+                    cancelacion.getHora(),
+                    cancelacion.getMinuto(),
+                    cancelacion.getDiasCancelado());
+        } catch (Exception e) {
+            log.error("Error al registrar cancelación en BD: {}", e.getMessage());
+        }
+        log.info("✅ [CANCELAR] Instancia {} CANCELADA. Segmentos afectados={}, capacidad liberada={}",
+                idInstancia, totalSegmentosAfectados, totalCapacidadLiberada);
+
+        // --------------------------------------------------------------------
+        // 8) Respuesta
+        // --------------------------------------------------------------------
+        ResultadoCancelacionDTO dto = ResultadoCancelacionDTO.builder()
+                .exitoso(true)
+                .mensaje(String.format(
+                        "Instancia cancelada. Segmentos afectados: %d, capacidad liberada: %d",
+                        totalSegmentosAfectados, totalCapacidadLiberada))
+                .idInstancia(instancia.getIdInstancia())
+                .vueloBaseId(instancia.getVueloBase().getId())
+                .productosAfectados(totalCapacidadLiberada)
+                .origen(instancia.getVueloBase().getAeropuertoOrigen().getCodigoIATA())
+                .destino(instancia.getVueloBase().getAeropuertoDestino().getCodigoIATA())
+                .build();
+
+        return ResponseEntity.ok(dto);
     }
 
     @Operation(summary = "Listar todos los vuelos", description = "Obtiene una lista de todos los vuelos como DTOs (sin lazy loading)")

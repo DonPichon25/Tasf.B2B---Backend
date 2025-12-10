@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface PedidoRepository extends JpaRepository<Pedido, Integer> {
@@ -24,7 +25,8 @@ public interface PedidoRepository extends JpaRepository<Pedido, Integer> {
     
     List<Pedido> findByClienteId(Long clienteId);
     List<Pedido> findByEstado(EstadoPedido estado);
-    
+    Optional<Pedido> findByExternalId(String externalId);
+
     /**
      * Busca pedidos dentro de una ventana de tiempo (para escenarios diarios/semanales)
      * SIN cargar productos (LAZY) - OPTIMIZADO
@@ -119,4 +121,6 @@ public interface PedidoRepository extends JpaRepository<Pedido, Integer> {
 
     @Query(value = "select count(id) from pedidos where tipo_data = 0",nativeQuery = true)
     int contarTipoDataCero();
+    @Query("SELECT COALESCE(MAX(p.id), 0) FROM Pedido p WHERE p.tipoData = :tipoData")
+    Integer findMaxIdByTipoData(@Param("tipoData") int tipoData);
 }
