@@ -45,8 +45,8 @@ public interface SegmentoVueloRepository extends JpaRepository<SegmentoVuelo, In
     List<SegmentoVuelo> findByPedidoId(Integer pedidoId);
     @Modifying
     @Transactional
-    @Query("DELETE FROM SegmentoVuelo s WHERE s.planViaje.fechaPlanificacion >= :desde")
-    int deleteByPlanFechaFrom(@Param("desde") LocalDateTime desde);
+    @Query("DELETE FROM SegmentoVuelo s WHERE s.horaSalidaEstimada >= :desde")
+    int deleteByHoraSalidaEstimada(@Param("desde") LocalDateTime desde);
     /**
      * Buscar segmentos que salen en un rango de tiempo
      */

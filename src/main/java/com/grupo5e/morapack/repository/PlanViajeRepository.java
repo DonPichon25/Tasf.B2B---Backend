@@ -33,8 +33,8 @@ public interface PlanViajeRepository extends JpaRepository<PlanViaje, Integer> {
     List<PlanViaje> findByAlgoritmoUsado(String algoritmoUsado);
     @Modifying
     @Transactional
-    @Query("DELETE FROM PlanViaje p WHERE p.fechaPlanificacion >= :desde")
-    int deleteByFechaPlanificacionFrom(@Param("desde") LocalDateTime desde);
+    @Query("DELETE FROM PlanViaje p WHERE p.createdAt <= :desde")
+    int deleteByCreatedAt(@Param("desde") LocalDateTime desde);
     /**
      * Buscar planes en un rango de fechas
      */
