@@ -178,15 +178,11 @@ public class LectorPedidosV2 {
             return resultado;
         }
 
-        // Buscar todos los archivos con patrón _pedidos_{AIRPORT}_ o _pedidos_{AIRPORT}_.txt
-        File[] archivosPedidos = directorio.listFiles((dir, nombre) ->
-                nombre.startsWith("_pedidos_") &&
-                        (nombre.endsWith("_") || nombre.endsWith("_.txt") || nombre.endsWith(".txt"))
-        );
+        File[] archivosPedidos = directorio.listFiles(f -> f.isFile() && !f.isHidden());
 
         if (archivosPedidos == null || archivosPedidos.length == 0) {
             resultado.exito = false;
-            resultado.mensajeError = "No se encontraron archivos con patrón _pedidos_{AIRPORT}_";
+            resultado.mensajeError = "No se encontraron archivos en: " + directorioDatos;
             System.err.println("WARNING: " + resultado.mensajeError);
             return resultado;
         }

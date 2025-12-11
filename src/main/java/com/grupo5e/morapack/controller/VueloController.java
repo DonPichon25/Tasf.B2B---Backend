@@ -9,10 +9,7 @@ import com.grupo5e.morapack.api.mapper.VueloMapper;
 import com.grupo5e.morapack.core.enums.EstadoProducto;
 import com.grupo5e.morapack.core.enums.EstadoVuelo;
 import com.grupo5e.morapack.core.model.*;
-import com.grupo5e.morapack.repository.InstanciaVueloRepository;
-import com.grupo5e.morapack.repository.PlanViajeRepository;
-import com.grupo5e.morapack.repository.ProductoRepository;
-import com.grupo5e.morapack.repository.SegmentoVueloRepository;
+import com.grupo5e.morapack.repository.*;
 import com.grupo5e.morapack.service.CancelacionService;
 import com.grupo5e.morapack.service.VueloService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -46,12 +44,16 @@ public class VueloController {
     private final CancelacionService cancelacionService;
     private final SegmentoVueloRepository segmentoVueloRepository;
     private final PlanViajeRepository planViajeRepository;
+    private final PedidoRepository pedidoRepository;
+    // Aeropuertos “origen principal”
+    private static final Set<String> AEROPUERTOS_ORIGEN_PRINCIPALES =
+            new HashSet<>(Arrays.asList("SPIM", "EBCI", "UBBB"));
 
     public VueloController(VueloService vueloService, VueloMapper vueloMapper,
                            ProductoRepository productoRepository,
                            InstanciaVueloRepository instanciaVueloRepository,
                            CancelacionService cancelacionService, SegmentoVueloRepository segmentoVueloRepository,
-                           PlanViajeRepository planViajeRepository) {
+                           PlanViajeRepository planViajeRepository, PedidoRepository pedidoRepository) {
         this.vueloService = vueloService;
         this.vueloMapper = vueloMapper;
         this.productoRepository = productoRepository;
@@ -59,6 +61,7 @@ public class VueloController {
         this.cancelacionService = cancelacionService;
         this.segmentoVueloRepository = segmentoVueloRepository;
         this.planViajeRepository = planViajeRepository;
+        this.pedidoRepository = pedidoRepository;
     }
     /**
      * Cancela una instancia de vuelo concreta (FL-...-yyyyMMdd-HHmm)
@@ -79,7 +82,10 @@ public class VueloController {
             @PathVariable String idInstancia,
             @RequestParam("tiempoSimulacionActual")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-            LocalDateTime tiempoSimulacionActual
+            LocalDateTime tiempoSimulacionActual,
+            @RequestParam(value = "tiempoSiguienteVentana", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+            LocalDateTime tiempoSiguienteVentana
     ) {
         log.info("✈️ [CANCELAR] Solicitud para cancelar instancia {} en tiempoSimulacionActual={}",
                 idInstancia, tiempoSimulacionActual);
@@ -286,7 +292,7 @@ public class VueloController {
                         instanciaSeg.getIdInstancia(),
                         instanciaSeg.getCapacidadUsada(),
                         instanciaSeg.getProductosAsignados());
-                    totalCapacidadLiberada += segPlan.getPedido().getCantidadProductos();
+                    totalCapacidadLiberada +=segPlan.getCapacidadReservada();
                     totalSegmentosAfectados++;
                 //}
             }
@@ -334,7 +340,23 @@ public class VueloController {
         }
         log.info("✅ [CANCELAR] Instancia {} CANCELADA. Segmentos afectados={}, capacidad liberada={}",
                 idInstancia, totalSegmentosAfectados, totalCapacidadLiberada);
+        // --------------------------------------------------------------------
+        // 7.bis) Reprogramar / recrear pedidos según sea ORIGEN o ESCALA
+        // --------------------------------------------------------------------
+        log.info("TIEMPO SIG VENTANA PARA PASAR A CANCELAR: {}", tiempoSiguienteVentana);
+        if (tiempoSiguienteVentana != null) {
+            try {
+                ajustarPedidosPorCancelacion(instancia, segmentosDeInstancia, tiempoSiguienteVentana);
+            } catch (Exception e) {
+                log.error("❌ [CANCELAR-PEDIDOS] Error al ajustar pedidos para instancia {}: {}",
+                        instancia.getIdInstancia(), e.getMessage(), e);
+            }
+        } else {
+            log.warn("⚠️ [CANCELAR-PEDIDOS] No se recibió tiempoSiguienteVentana; no se reprograman pedidos.");
+        }
 
+        log.info("✅ [CANCELAR] Instancia {} CANCELADA. Segmentos afectados={}, capacidad liberada={}",
+                idInstancia, totalSegmentosAfectados, totalCapacidadLiberada);
         // --------------------------------------------------------------------
         // 8) Respuesta
         // --------------------------------------------------------------------
@@ -352,7 +374,132 @@ public class VueloController {
 
         return ResponseEntity.ok(dto);
     }
+    /**
+     * Ajusta pedidos cuando se cancela una instancia de vuelo.
+     *
+     * REGLAS:
+     * - Si el aeropuerto origen del vuelo base es SPIM / EBCI / UBBB => ESCENARIO 1
+     *      Origen -> Destino / Origen -> Escala:
+     *       Se ACTUALIZA el mismo pedido: fechaPedido = tiempoSiguienteVentana, fechaActualizacion = ahora Lima.
+     *
+     * - Si el aeropuerto origen NO es uno de esos 3 => ESCENARIO 2 (escala -> destino / escala -> escala):
+     *       Se CREAN NUEVOS pedidos clonando datos del original, pero:
+     *          * fechaPedido       = tiempoSiguienteVentana
+     *          * fechaCreacion     = ahora Lima
+     *          * fechaActualizacion= ahora Lima
+     *          * aeropuertoOrigenCodigo = código IATA de la escala (origen del vuelo cancelado)
+     */
+    private void ajustarPedidosPorCancelacion(InstanciaVuelo instancia,
+                                              List<SegmentoVuelo> segmentosDeInstancia,
+                                              LocalDateTime tiempoSiguienteVentana) {
+        if (instancia == null || instancia.getVueloBase() == null) {
+            log.warn("⚠️ [CANCELAR-PEDIDOS] Instancia o vuelo base nulos. No se ajustan pedidos.");
+            return;
+        }
 
+        Vuelo vueloBase = instancia.getVueloBase();
+
+        // Código IATA del aeropuerto origen del vuelo de la instancia cancelada
+        String codigoOrigen = null;
+        if (vueloBase.getAeropuertoOrigen() != null) {
+            codigoOrigen = vueloBase.getAeropuertoOrigen().getCodigoIATA();
+        }
+
+        if (codigoOrigen == null) {
+            log.warn("⚠️ [CANCELAR-PEDIDOS] Vuelo base sin aeropuerto origen. No se ajustan pedidos.");
+            return;
+        }
+
+        boolean esOrigenPrincipal = AEROPUERTOS_ORIGEN_PRINCIPALES.contains(codigoOrigen);
+
+        if (segmentosDeInstancia == null || segmentosDeInstancia.isEmpty()) {
+            log.info("ℹ️ [CANCELAR-PEDIDOS] No hay segmentos asociados a la instancia. Nada que ajustar.");
+            return;
+        }
+
+        // Pedidos únicos que pasan por ESTA instancia (flightId + fechaHoraSalida)
+        Set<Pedido> pedidosAfectados = segmentosDeInstancia.stream()
+                .map(SegmentoVuelo::getPedido)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (pedidosAfectados.isEmpty()) {
+            log.info("ℹ️ [CANCELAR-PEDIDOS] Segmentos sin pedidos asociados. Nada que ajustar.");
+            return;
+        }
+
+        // "Ahora" en hora Perú (real)
+        LocalDateTime ahoraLima = LocalDateTime.now(ZoneId.of("America/Lima"));
+
+        if (esOrigenPrincipal) {
+            // =========================================================
+            // ESCENARIO 1: Origen principal (SPIM / EBCI / UBBB)
+            //      -> Origen->Destino o Origen->Escala
+            //      Se reprograma el MISMO pedido a la siguiente ventana
+            // =========================================================
+            for (Pedido pedido : pedidosAfectados) {
+                pedido.setFechaPedido(tiempoSiguienteVentana);
+                pedido.setFechaActualizacion(ahoraLima);
+            }
+
+            pedidoRepository.saveAll(pedidosAfectados);
+
+            log.info("✅ [CANCELAR-PEDIDOS] Reprogramados {} pedidos a nueva ventana {} desde origen principal {}",
+                    pedidosAfectados.size(), tiempoSiguienteVentana, codigoOrigen);
+
+        } else {
+            // =========================================================
+            // ESCENARIO 2: Vuelo de ESCALA (origen distinto a SPIM/EBCI/UBBB)
+            //      -> Escala->Destino o Escala->Escala
+            //      Se crean NUEVOS pedidos con origen = escala
+            // =========================================================
+            List<Pedido> nuevosPedidos = new ArrayList<>();
+
+            for (Pedido original : pedidosAfectados) {
+                Pedido nuevo = new Pedido();
+
+                // NO copiamos el id ni el externalId para no violar PK/unique
+                // nuevo.setId(null);  // no hace falta, JPA lo maneja
+                // externalId: lo dejamos null o podrías generar uno nuevo
+                // nuevo.setExternalId(...);
+                nuevo.setExternalId(original.getExternalId());
+                nuevo.setNombre(original.getNombre());
+                nuevo.setCliente(original.getCliente());
+
+                // Aeropuerto destino se mantiene igual
+                nuevo.setAeropuertoDestinoCodigo(original.getAeropuertoDestinoCodigo());
+
+                // Nueva fecha de pedido = inicio de la siguiente ventana
+                nuevo.setFechaPedido(tiempoSiguienteVentana);
+
+                // Fechas de entrega / estado, igual que el original (puedes ajustarlo a PENDIENTE si quieres)
+                nuevo.setFechaLimiteEntrega(tiempoSiguienteVentana.plusDays(5));
+                nuevo.setEstado(original.getEstado());
+
+                // 👇 Aquí viene lo importante del escenario 2:
+                // aeropuerto_origen_codigo = código de la ESCALA (origen del vuelo cancelado)
+                nuevo.setAeropuertoOrigenCodigo(codigoOrigen);
+
+                nuevo.setHorasRecogida(original.getHorasRecogida());
+                nuevo.setCantidadProductos(original.getCantidadProductos());
+                nuevo.setTipoData(original.getTipoData());
+                nuevo.setPrioridad(original.getPrioridad());
+
+                // Fechas de auditoría “ahora” en hora Perú
+                nuevo.setFechaCreacion(ahoraLima);
+                nuevo.setFechaActualizacion(ahoraLima);
+
+                nuevosPedidos.add(nuevo);
+            }
+
+            if (!nuevosPedidos.isEmpty()) {
+                pedidoRepository.saveAll(nuevosPedidos);
+            }
+
+            log.info("✅ [CANCELAR-PEDIDOS] Creados {} nuevos pedidos desde escala {} a ventana {}",
+                    nuevosPedidos.size(), codigoOrigen, tiempoSiguienteVentana);
+        }
+    }
     @Operation(summary = "Listar todos los vuelos", description = "Obtiene una lista de todos los vuelos como DTOs (sin lazy loading)")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista de vuelos obtenida exitosamente")
