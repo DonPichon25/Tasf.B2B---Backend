@@ -703,7 +703,7 @@ public class LectorPedidosV2 {
         nuevoCliente.setCorreo("cliente" + idCliente + "@morapack.com");
         nuevoCliente.setCiudadRecojo(ciudadRecojo);
         nuevoCliente.setRol(Rol.CLIENTE);
-        nuevoCliente.setUsernameOrEmail("cliente" + idCliente);
+        nuevoCliente.setUsernameOrEmail("cliente" + idCliente+"-"+tipo);
         nuevoCliente.setPassword("temporal");
         nuevoCliente.setActivo(true);
 
