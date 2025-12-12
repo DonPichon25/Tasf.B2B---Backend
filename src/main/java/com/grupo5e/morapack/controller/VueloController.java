@@ -456,45 +456,53 @@ public class VueloController {
             List<Pedido> nuevosPedidos = new ArrayList<>();
 
             for (Pedido original : pedidosAfectados) {
-                Pedido nuevo = new Pedido();
+                original.setFechaPedido(tiempoSiguienteVentana);
+                original.setFechaActualizacion(ahoraLima);
+                original.setFechaLimiteEntrega(tiempoSiguienteVentana.plusDays(5));
+                original.setAeropuertoOrigenCodigo(codigoOrigen);
+                //antes se creaba otro ya no
+                //Pedido nuevo = new Pedido();
 
                 // NO copiamos el id ni el externalId para no violar PK/unique
                 // nuevo.setId(null);  // no hace falta, JPA lo maneja
                 // externalId: lo dejamos null o podrías generar uno nuevo
                 // nuevo.setExternalId(...);
-                nuevo.setExternalId(original.getExternalId());
-                nuevo.setNombre(original.getNombre());
-                nuevo.setCliente(original.getCliente());
+//                nuevo.setExternalId(original.getExternalId()+"-V2");
+//                nuevo.setNombre(original.getNombre());
+//                nuevo.setCliente(original.getCliente());
 
                 // Aeropuerto destino se mantiene igual
-                nuevo.setAeropuertoDestinoCodigo(original.getAeropuertoDestinoCodigo());
+                //nuevo.setAeropuertoDestinoCodigo(original.getAeropuertoDestinoCodigo());
 
                 // Nueva fecha de pedido = inicio de la siguiente ventana
-                nuevo.setFechaPedido(tiempoSiguienteVentana);
+                //nuevo.setFechaPedido(tiempoSiguienteVentana);
 
                 // Fechas de entrega / estado, igual que el original (puedes ajustarlo a PENDIENTE si quieres)
-                nuevo.setFechaLimiteEntrega(tiempoSiguienteVentana.plusDays(5));
-                nuevo.setEstado(original.getEstado());
+                //nuevo.setFechaLimiteEntrega(tiempoSiguienteVentana.plusDays(5));
+                //nuevo.setEstado(original.getEstado());
 
-                // 👇 Aquí viene lo importante del escenario 2:
+                // Aquí viene lo importante del escenario 2:
                 // aeropuerto_origen_codigo = código de la ESCALA (origen del vuelo cancelado)
-                nuevo.setAeropuertoOrigenCodigo(codigoOrigen);
+                //nuevo.setAeropuertoOrigenCodigo(codigoOrigen);
 
-                nuevo.setHorasRecogida(original.getHorasRecogida());
-                nuevo.setCantidadProductos(original.getCantidadProductos());
-                nuevo.setTipoData(original.getTipoData());
-                nuevo.setPrioridad(original.getPrioridad());
+                //nuevo.setHorasRecogida(original.getHorasRecogida());
+                //nuevo.setCantidadProductos(original.getCantidadProductos());
+                //nuevo.setTipoData(original.getTipoData());
+                //nuevo.setPrioridad(original.getPrioridad());
 
                 // Fechas de auditoría “ahora” en hora Perú
-                nuevo.setFechaCreacion(ahoraLima);
-                nuevo.setFechaActualizacion(ahoraLima);
+//                nuevo.setFechaCreacion(ahoraLima);
+//                nuevo.setFechaActualizacion(ahoraLima);
 
-                nuevosPedidos.add(nuevo);
+                //nuevosPedidos.add(nuevo);
+                pedidoRepository.saveAll(pedidosAfectados);
+                log.info("✅ [CANCELAR-PEDIDOS] Reprogramados {} pedidos a nueva ventana {} desde origen principal {}",
+                        pedidosAfectados.size(), tiempoSiguienteVentana, codigoOrigen);
             }
 
-            if (!nuevosPedidos.isEmpty()) {
-                pedidoRepository.saveAll(nuevosPedidos);
-            }
+//            if (!nuevosPedidos.isEmpty()) {
+//                pedidoRepository.saveAll(nuevosPedidos);
+//            }
 
             log.info("✅ [CANCELAR-PEDIDOS] Creados {} nuevos pedidos desde escala {} a ventana {}",
                     nuevosPedidos.size(), codigoOrigen, tiempoSiguienteVentana);
