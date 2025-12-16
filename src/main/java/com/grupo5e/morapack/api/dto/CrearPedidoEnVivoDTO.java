@@ -18,6 +18,16 @@ public class CrearPedidoEnVivoDTO {
     private Integer cantidadProductos;
     private LocalDateTime fechaPedido;   // viene del front = inicio próxima ventana
     private Integer tipoData;           // normalmente 1
+    private Long clienteId;
 
+    // getters/setters...
+
+    public Long getClienteId() {
+        return clienteId;
+    }
+
+    public void setClienteId(Long clienteId) {
+        this.clienteId = clienteId;
+    }
     // getters y setters
 }

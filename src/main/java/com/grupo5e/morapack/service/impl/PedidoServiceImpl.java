@@ -4,6 +4,7 @@ import com.grupo5e.morapack.api.dto.CrearPedidoEnVivoDTO;
 import com.grupo5e.morapack.api.exception.ResourceNotFoundException;
 import com.grupo5e.morapack.core.enums.EstadoPedido;
 import com.grupo5e.morapack.core.enums.EstadoProducto;
+import com.grupo5e.morapack.core.enums.Rol;
 import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.repository.PedidoRepository;
 import com.grupo5e.morapack.repository.ProductoRepository;
@@ -87,8 +88,11 @@ public class PedidoServiceImpl implements PedidoService {
                 () -> new IllegalArgumentException("Aeropuerto destino desconocido: " + obtenerAeropuertoOrigenParaDestino(aeropuertoDestino))
         );
         // 6) Cliente (puede ser un cliente "dummy" o buscado por ciudad, como en parsearLineaPedido)
-        Cliente cliente = clienteService.buscarPorId(14064L,1);//CUIDAOOOOOOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-
+        //Cliente cliente = clienteService.buscarPorId(14064L,1);//CUIDAOOOOOOOOOOOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        if (dto.getClienteId() == null) {
+            throw new IllegalArgumentException("clienteId es requerido para registrar el pedido.");
+        }
+        Cliente cliente = obtenerOCrearCliente(dto.getClienteId(), 1, aeropuertoDestino.getCiudad());
         // 7) Construir Pedido
         Pedido pedido = new Pedido();
         //pedido.setId(94872);//cambiar pa q use el nuevo id
@@ -96,7 +100,7 @@ public class PedidoServiceImpl implements PedidoService {
 
         // external_id: DESTINO + "-" + id con ceros a la izquierda
         String externalId = dto.getAeropuertoDestinoCodigo() + "-" +
-                String.format("%09d", 94873); // 9 dígitos: 000023653
+                String.format("%09d", nuevoId); // 9 dígitos: 000023653
         pedido.setExternalId(externalId);
 
         pedido.setNombre("PEDIDO-" + 94873 + "-" + codigoDestino);
@@ -128,23 +132,73 @@ public class PedidoServiceImpl implements PedidoService {
 
         return pedido;
     }
+    private Cliente obtenerOCrearCliente(Long clienteId, Integer tipoData, Ciudad ciudadRecojo) {
+
+        // 1) Buscar
+        try {
+            Cliente existente = clienteService.buscarPorId(clienteId, tipoData);
+            if (existente != null) return existente;
+        } catch (Exception ignored) {}
+
+        // 2) Crear
+        Cliente nuevo = new Cliente();
+
+        UsuarioId usuarioId = new UsuarioId();
+        usuarioId.setId(clienteId);
+        usuarioId.setTipoData(tipoData);
+
+        nuevo.setUsuarioId(usuarioId);
+        nuevo.setNombres("Cliente " + clienteId);
+        nuevo.setCorreo("cliente" + clienteId + "@morapack.com");
+        nuevo.setCiudadRecojo(ciudadRecojo);
+
+        nuevo.setRol(Rol.CLIENTE);
+        nuevo.setUsernameOrEmail("cliente" + clienteId + "-" + tipoData);
+        nuevo.setPassword("temporal");
+        nuevo.setActivo(true);
+
+        // Insertar y re-leer (para asegurar entidad PERSISTIDA/managed)
+        try {
+            clienteService.insertar(nuevo);
+        } catch (Exception ignored) {
+            // si falló por duplicado en carrera, igual re-leemos abajo
+        }
+
+        Cliente persistido = clienteService.buscarPorId(clienteId, tipoData);
+        if (persistido == null) {
+            throw new IllegalStateException("No se pudo crear/obtener cliente id=" + clienteId + " tipoData=" + tipoData);
+        }
+        return persistido;
+    }
+
 
     // Puedes reutilizar estas helper o copiarlas de donde ya las tienes:
     private String obtenerAeropuertoOrigenParaDestino(Aeropuerto destino) {
-        // Lista de códigos IATA de los aeropuertos principales de MoraPack
-        String[] aeropuertosPrincipales = {"SPIM", "UBBB", "EBCI"};
-        ArrayList<String> aeropuertos = new ArrayList<>();
+//        // Lista de códigos IATA de los aeropuertos principales de MoraPack
+//        String[] aeropuertosPrincipales = {"SPIM", "UBBB", "EBCI"};
+//        ArrayList<String> aeropuertos = new ArrayList<>();
+//
+//        Random random = new Random();
+//        for (int i = 0; i < 3; i++) {
+//            if(Objects.equals(destino, aeropuertosPrincipales[i]))
+//                continue;
+//            aeropuertos.add(aeropuertosPrincipales[i]);
+//        }
+//        int indiceAleatorio = random.nextInt(aeropuertos.size());
+//        String codigoIATAOrigen = aeropuertos.get(indiceAleatorio);
+//        //System.out.println("🔀 Usando aeropuerto por defecto: " + codigoIATAOrigen);
+//        return codigoIATAOrigen;
+        String[] principales = {"SPIM", "UBBB", "EBCI"};
+        ArrayList<String> candidatos = new ArrayList<>();
 
-        Random random = new Random();
-        for (int i = 0; i < 3; i++) {
-            if(Objects.equals(destino, aeropuertosPrincipales[i]))
-                continue;
-            aeropuertos.add(aeropuertosPrincipales[i]);
+        String codigoDestino = destino.getCodigoIATA();
+
+        for (String p : principales) {
+            if (!Objects.equals(codigoDestino, p)) {
+                candidatos.add(p);
+            }
         }
-        int indiceAleatorio = random.nextInt(aeropuertos.size());
-        String codigoIATAOrigen = aeropuertos.get(indiceAleatorio);
-        //System.out.println("🔀 Usando aeropuerto por defecto: " + codigoIATAOrigen);
-        return codigoIATAOrigen;
+        return candidatos.get(new Random().nextInt(candidatos.size()));
     }
 
     private double calcularPrioridad(LocalDateTime fechaPedido, LocalDateTime plazoEntrega) {
