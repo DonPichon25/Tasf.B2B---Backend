@@ -99,11 +99,12 @@ public class PedidoServiceImpl implements PedidoService {
         pedido.setTipoData(1);
 
         // external_id: DESTINO + "-" + id con ceros a la izquierda
-        String externalId = dto.getAeropuertoDestinoCodigo() + "-" +
-                String.format("%09d", nuevoId); // 9 dígitos: 000023653
+        //String externalId = dto.getAeropuertoDestinoCodigo() + "-" +
+                //String.format("%09d", nuevoId); // 9 dígitos: 000023653
+        String externalId = dto.getAeropuertoDestinoCodigo() + "-" +dto.getPedidoId()+"-1";
         pedido.setExternalId(externalId);
 
-        pedido.setNombre("PEDIDO-" + 94873 + "-" + codigoDestino);
+        pedido.setNombre("PEDIDO-" + dto.getPedidoId() + "-" + codigoDestino);
         pedido.setCliente(cliente);
         //pedido.getCliente().setTipoData(1);
 

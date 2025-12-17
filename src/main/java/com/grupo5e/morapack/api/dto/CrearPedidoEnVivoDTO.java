@@ -19,6 +19,7 @@ public class CrearPedidoEnVivoDTO {
     private LocalDateTime fechaPedido;   // viene del front = inicio próxima ventana
     private Integer tipoData;           // normalmente 1
     private Long clienteId;
+    private String pedidoId;
 
     // getters/setters...
 
