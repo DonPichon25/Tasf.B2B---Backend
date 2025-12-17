@@ -196,6 +196,10 @@ public class DataImportController {
         
         if (horaInicio != null && horaFin != null) {
             log.info("   🕒 Ventana de tiempo: {} a {}", horaInicio, horaFin);
+        } else if (horaInicio != null) {
+            log.info("   🕒 Filtrado desde: {} (sin límite superior)", horaInicio);
+        } else if (horaFin != null) {
+            log.info("   🕒 Filtrado hasta: {} (sin límite inferior)", horaFin);
         }
         
         // Validar archivo básico
@@ -353,6 +357,14 @@ public class DataImportController {
         
         log.info("📦 Batch import de {} archivos de pedidos", files.length);
         
+        if (horaInicio != null && horaFin != null) {
+            log.info("   🕒 Ventana de tiempo: {} a {}", horaInicio, horaFin);
+        } else if (horaInicio != null) {
+            log.info("   🕒 Filtrado desde: {} (sin límite superior)", horaInicio);
+        } else if (horaFin != null) {
+            log.info("   🕒 Filtrado hasta: {} (sin límite inferior)", horaFin);
+        }
+
         // Parsear fechas opcionales
         LocalDateTime horaInicioDateTime = null;
         LocalDateTime horaFinDateTime = null;
