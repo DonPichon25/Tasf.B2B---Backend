@@ -557,6 +557,10 @@ public class DataImportService {
                     log.info("   🕒 Filtrando pedidos por ventana de tiempo:");
                     log.info("      Inicio: {}", horaInicio);
                     log.info("      Fin: {}", horaFin);
+                } else if (horaInicio != null) {
+                    log.info("   🕒 Filtrando pedidos desde: {} (sin límite superior)", horaInicio);
+                } else if (horaFin != null) {
+                    log.info("   🕒 Filtrando pedidos hasta: {} (sin límite inferior)", horaFin);
                 } else {
                     log.info("   📦 Cargando TODOS los pedidos del archivo (sin filtrado)");
                 }

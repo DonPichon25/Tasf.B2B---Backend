@@ -44,12 +44,15 @@ public class BatchService {
     /**
      * 🔥 OPTIMIZADO: Inserta pedidos en verdadero batch con JDBC
      * 
-     * Estrategia:
-     * 1. Deshabilita validaciones costosas
+     * Estrategia CONSERVADORA para evitar "delayed insert actions":
+     * 1. Verifica relaciones bidireccionales pedido ↔ productos
      * 2. Usa persist() directo (más rápido que merge())
-     * 3. Flush/Clear cada batch para liberar memoria
-     * 4. Productos se insertan en cascade pero en batch
-     * 
+     * 3. Flush periódico SIN clear() durante el proceso
+     * 4. Clear SOLO al final para evitar desconectar entidades prematuramente
+     * 5. Productos se insertan automáticamente en cascade
+     *
+     * NOTA: Este enfoque usa más memoria pero es 100% seguro para cascade
+     *
      * @param pedidos Lista de pedidos con productos
      * @return Cantidad de pedidos insertados
      */
@@ -59,7 +62,7 @@ public class BatchService {
             return 0;
         }
 
-        log.info("🚀 Iniciando batch insert de {} pedidos...", pedidos.size());
+        log.info("🚀 Iniciando batch insert de {} pedidos con productos en cascade...", pedidos.size());
         long startTime = System.currentTimeMillis();
 
         int insertados = 0;
@@ -68,31 +71,44 @@ public class BatchService {
         for (int i = 0; i < pedidos.size(); i++) {
             Pedido pedido = pedidos.get(i);
             
-            // CRÍTICO: persist() es más rápido que merge() para nuevas entidades
+            // ✅ CRÍTICO: Asegurar relación bidireccional con productos
+            if (pedido.getProductos() != null && !pedido.getProductos().isEmpty()) {
+                for (Producto producto : pedido.getProductos()) {
+                    // Si el producto no tiene referencia al pedido, agregarla
+                    if (producto.getPedido() == null) {
+                        producto.setPedido(pedido);
+                    }
+                }
+            }
+
+            // 🚀 CRÍTICO: persist() automáticamente persiste productos por CASCADE
             entityManager.persist(pedido);
             insertados++;
 
-            // Flush y clear cada batch para:
-            // 1. Enviar el batch real a BD
-            // 2. Liberar memoria (evitar OutOfMemory)
-            if (i > 0 && i % batchSize == 0) {
+            // ⚠️ ESTRATEGIA CONSERVADORA: Solo flush() periódico, SIN clear()
+            // Esto mantiene las entidades managed hasta el final de la transacción
+            // Evita el error "delayed insert actions" por entidades desconectadas
+            if ((i + 1) % batchSize == 0) {
                 lote++;
+
+                // Flush envía todo a BD pero mantiene las entidades en el contexto
                 entityManager.flush();
-                entityManager.clear();
-                
-                log.debug("  ✓ Lote {}: {} pedidos persistidos", lote, batchSize);
+
+                log.debug("  ✓ Lote {}: {} pedidos (+ productos) enviados a BD", lote, batchSize);
             }
         }
 
-        // Flush final para pedidos restantes
+        // ✅ Flush final para pedidos restantes
         entityManager.flush();
-        entityManager.clear();
 
         long endTime = System.currentTimeMillis();
         double segundos = (endTime - startTime) / 1000.0;
         
-        log.info("✅ Batch insert completado: {} pedidos en {:.2f}s ({:.0f} pedidos/s)",
+        log.info("✅ Batch insert completado: {} pedidos (+ productos en cascade) en {:.1f}s ({:.0f} pedidos/s)",
                 insertados, segundos, insertados / segundos);
+
+        // Clear solo al final de la transacción completa
+        entityManager.clear();
 
         return insertados;
     }
@@ -164,7 +180,15 @@ public class BatchService {
 
         for (int i = 0; i < productos.size(); i++) {
             Producto producto = productos.get(i);
-            entityManager.persist(producto);
+            // 1) Re-enganchar el pedido como referencia managed
+            if (producto.getPedido() != null && producto.getPedido().getId() != null) {
+                Pedido pedidoRef = entityManager.getReference(Pedido.class, producto.getPedido().getId());
+                producto.setPedido(pedidoRef);
+            }
+
+            // 2) merge() tolera transient o detached (persist() no)
+            entityManager.merge(producto);
+            //entityManager.persist(producto);
             insertados++;
 
             if (i > 0 && i % batchSize == 0) {
