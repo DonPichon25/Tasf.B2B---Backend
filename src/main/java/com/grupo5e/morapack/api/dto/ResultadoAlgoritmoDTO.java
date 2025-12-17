@@ -50,4 +50,31 @@ public class ResultadoAlgoritmoDTO {
 
     @Schema(description = "Timeline temporal de la simulación con eventos ordenados")
     private LineaDeTiempoSimulacionDTO lineaDeTiempo;
+
+    // ==================== INFORMACIÓN DE PEDIDOS NO ASIGNADOS ====================
+    
+    @Schema(description = "Número de pedidos asignados exitosamente", example = "145")
+    private Integer pedidosAsignados;
+
+    @Schema(description = "Número de pedidos no asignados", example = "5")
+    private Integer pedidosNoAsignados;
+
+    @Schema(description = "Lista de IDs de pedidos no asignados")
+    private List<Integer> pedidosNoAsignadosIds;
+
+    @Schema(description = "Información detallada de pedidos no asignados (incluye fechas para detectar colapso)")
+    private List<PedidoNoAsignadoInfoDTO> pedidosNoAsignadosInfo;
+
+    // ==================== INFORMACIÓN DE PRODUCTOS ====================
+    
+    @Schema(description = "Número de productos asignados a rutas", example = "1200")
+    private Integer productosAsignados;
+
+    @Schema(description = "Número de productos no asignados", example = "50")
+    private Integer productosNoAsignados;
+
+    // ==================== MÉTRICAS DE VUELOS ====================
+    
+    @Schema(description = "Total de vuelos utilizados en la solución", example = "89")
+    private Integer vuelosUtilizados;
 }
