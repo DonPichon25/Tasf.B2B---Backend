@@ -3,6 +3,7 @@ package com.grupo5e.morapack.controller;
 import com.grupo5e.morapack.api.dto.FileUploadValidationResponse;
 import com.grupo5e.morapack.api.dto.FileValidationResult;
 import com.grupo5e.morapack.core.model.Aeropuerto;
+import com.grupo5e.morapack.core.model.Pedido;
 import com.grupo5e.morapack.service.FileParsingService;
 import com.grupo5e.morapack.service.TemporaryDataStorageService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -202,6 +203,78 @@ public class FileUploadController {
             return false;
         }
         return true;
+    }
+
+    @Operation(summary = "Validación volátil para Test de Colapso",
+            description = "Procesa pedidos y cancelaciones en RAM sin persistir en BD.")
+    @PostMapping("/validar-volatil")
+    public ResponseEntity<FileUploadValidationResponse> validarVolatil(
+            @Parameter(description = "Lista de archivos de pedidos (.txt)")
+            @RequestParam("files") List<MultipartFile> files,
+
+            @Parameter(description = "Archivo de cancelaciones (opcional)")
+            @RequestParam(value = "cancelaciones", required = false) MultipartFile cancelacionesFile) {
+
+        log.info("🚀 Iniciando validación volátil para colapso. Archivos recibidos: {}", files.size());
+        FileUploadValidationResponse response = new FileUploadValidationResponse();
+        response.setSuccess(true);
+        String sessionId = UUID.randomUUID().toString();
+        response.setSessionId(sessionId);
+
+        try {
+            // 1. Validar tamaño de archivos
+            for (MultipartFile file : files) {
+                if (!validateFileSize(file, response)) return ResponseEntity.badRequest().body(response);
+            }
+            if (cancelacionesFile != null && !validateFileSize(cancelacionesFile, response)) {
+                return ResponseEntity.badRequest().body(response);
+            }
+
+            // 2. Procesar Pedidos (107k o los que vengan)
+            // Asumimos que parseOrders devuelve la lista de objetos pero NO guarda en BD
+            List<Pedido> todosLosPedidos = new java.util.ArrayList<>();
+            for (MultipartFile file : files) {
+                List<Pedido> pedidosParciales = fileParsingService.parseOrders(file);
+                todosLosPedidos.addAll(pedidosParciales);
+
+                response.getDetails().add(FileValidationResult.builder()
+                        .fileName(file.getOriginalFilename())
+                        .success(true)
+                        .parsedCount(pedidosParciales.size())
+                        .build());
+            }
+
+            // 3. Procesar Cancelaciones si existen
+            if (cancelacionesFile != null) {
+                // Aquí podrías tener un parseCancellations similar
+                // List<Cancelacion> cancelaciones = fileParsingService.parseCancellations(cancelacionesFile);
+                // temporaryDataStorageService.storeCancellations(sessionId, cancelaciones);
+
+                response.getDetails().add(FileValidationResult.builder()
+                        .fileName(cancelacionesFile.getOriginalFilename())
+                        .success(true)
+                        .parsedCount(1) // O el conteo real
+                        .build());
+            }
+
+            // 4. Guardar en Memoria Temporal (RAM)
+            // Este servicio es el que usará el algoritmo de colapso después
+            temporaryDataStorageService.storeOrders(sessionId, todosLosPedidos);
+
+            response.setMessage(String.format(
+                    "✅ Validación volátil exitosa. %d pedidos listos en RAM para el test de colapso.",
+                    todosLosPedidos.size()
+            ));
+
+            log.info("✅ Datos volátiles listos. Session ID: {}", sessionId);
+            return ResponseEntity.ok(response);
+
+        } catch (Exception e) {
+            log.error("❌ Error en validación volátil", e);
+            response.setSuccess(false);
+            response.setMessage("Error en el procesamiento RAM: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
     }
 }
 

@@ -5,6 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Respuesta de validación para archivos de simulación
  */
@@ -50,5 +53,9 @@ public class FileUploadValidationResponse {
      * Indica si se usarán datos de la base de datos como fallback
      */
     private boolean usingDatabaseFallback;
+
+    // AGREGA ESTO: Para manejar múltiples archivos en el test de colapso
+    @Builder.Default
+    private List<FileValidationResult> details = new ArrayList<>();
 }
 

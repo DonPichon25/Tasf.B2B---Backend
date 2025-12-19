@@ -171,5 +171,18 @@ public class TemporaryDataStorageService {
     public int getActiveSessionsCount() {
         return temporaryStorage.size();
     }
+
+    // Añade este método a tu TemporaryDataStorageService.java
+    public void storeOrders(String sessionId, List<Pedido> orders) {
+        // Obtenemos o creamos la sesión temporal
+        TemporarySimulationData data = temporaryStorage.computeIfAbsent(sessionId,
+                k -> new TemporarySimulationData());
+
+        // Guardamos la lista completa en la sesión
+        data.setPedidos(orders);
+        data.setCreatedAt(LocalDateTime.now());
+
+        log.info("💾 {} pedidos almacenados en RAM para la sesión {}", orders.size(), sessionId);
+    }
 }
 

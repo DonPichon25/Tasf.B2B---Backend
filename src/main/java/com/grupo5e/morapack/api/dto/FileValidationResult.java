@@ -79,5 +79,7 @@ public class FileValidationResult {
         }
         this.warnings.add(warning);
     }
+
+    private String fileName;
 }
 

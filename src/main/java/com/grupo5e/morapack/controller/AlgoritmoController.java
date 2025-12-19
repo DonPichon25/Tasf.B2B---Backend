@@ -7,6 +7,7 @@ import com.grupo5e.morapack.api.dto.*;
 import com.grupo5e.morapack.core.enums.EstadoProducto;
 import com.grupo5e.morapack.core.model.*;
 import com.grupo5e.morapack.repository.*;
+import com.grupo5e.morapack.service.TemporarySimulationData;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -16,9 +17,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
 import java.time.LocalDate;
@@ -1416,5 +1419,80 @@ private List<VueloSimpleDTO> convertirVuelosADTOConTiempos(ArrayList<Vuelo> vuel
                 .totalEventos(eventos.size())
                 .totalProductos(rutas.size())
                 .build();
+    }
+
+    @Operation(summary = "Ejecutar Test de Colapso en Memoria",
+            description = "Usa datos de la RAM (via sessionId) para encontrar el punto de colapso.")
+    @PostMapping("/colapso-in-mem")
+    public ResponseEntity<ResultadoAlgoritmoDTO> ejecutarColapsoInMem(
+            @RequestBody(required = false) ColapsoRequestDTO request) {
+        log.info("🔍 Iniciando búsqueda de colapso para sesión: {}", request.getSessionId());
+        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED)
+                .body(ResultadoAlgoritmoDTO.builder()
+                        .mensaje("Funcionalidad de test de colapso en memoria no implementada aún.")
+                        .build());
+//        [try {
+//            // 1. Recuperar los 107k pedidos de la RAM
+//            TemporarySimulationData tempData = temporaryDataStorageService.getTemporaryData(request.getSessionId());
+//
+//            if (tempData == null || tempData.getPedidos() == null) {
+//                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+//                        .body(ResultadoAlgoritmoDTO.builder()
+//                                .mensaje("No se encontraron datos en RAM para esta sesión. Por favor, suba los archivos de nuevo.")
+//                                .build());
+//            }
+//
+//            List<Pedido> pedidosParaSimular = tempData.getPedidos();
+//
+//            // 2. EJECUTAR EL ALGORITMO (Búsqueda de colapso)
+//            // El solver corre la simulación completa hasta encontrar el primer pedido que no llega a tiempo
+//            AlgoritmoResult resultadoCompleto = alnsSolver.findCollapsePoint(
+//                    pedidosParaSimular,
+//                    request.getHoraInicioSimulacion()
+//            );
+//
+//            if (resultadoCompleto.getPuntoColapso() == null) {
+//                return ResponseEntity.ok(ResultadoAlgoritmoDTO.builder()
+//                        .mensaje("El sistema NO colapsó con los datos proporcionados.")
+//                        .build());
+//            }
+//
+//            // 3. RECORTAR VENTANA DE 7 DÍAS (Colapso - 7 días hasta Colapso)
+//            LocalDateTime fechaColapso = resultadoCompleto.getPuntoColapso().getFechaColapso();
+//            LocalDateTime fechaInicioVentana = fechaColapso.minusDays(7);
+//
+//            // Filtramos los eventos de la línea de tiempo para enviar solo la semana crítica
+//            List<EventoLineaDeTiempoVueloDTO> eventosSemanales = resultadoCompleto.getTimeline().getEventos()
+//                    .stream()
+//                    .filter(e -> !e.getHoraEvento().isBefore(fechaInicioVentana) && !e.getHoraEvento().isAfter(fechaColapso))
+//                    .collect(Collectors.toList());
+//
+//            // 4. PREPARAR RESPUESTA
+//            LineaDeTiempoSimulacionDTO timelineReducida = LineaDeTiempoSimulacionDTO.builder()
+//                    .horaInicioSimulacion(fechaInicioVentana)
+//                    .horaFinSimulacion(fechaColapso)
+//                    .eventos(eventosSemanales)
+//                    .totalEventos(eventosSemanales.size())
+//                    .build();
+//
+//            ResultadoAlgoritmoDTO resultado = ResultadoAlgoritmoDTO.builder()
+//                    .exito(true)
+//                    .puntoColapso(resultadoCompleto.getPuntoColapso())
+//                    .timeline(timelineReducida)
+//                    .mensaje("Colapso detectado y procesado exitosamente.")
+//                    .build();
+//
+//            return ResponseEntity.ok(resultadoA.builder()
+//                    .exito(true)
+//                    .puntoColapso(resultadoCompleto.getPuntoColapso())
+//                    .timeline(timelineReducida)
+//                    .mensaje("Colapso detectado y procesado exitosamente.")
+//                    .build());
+//
+//        } catch (Exception e) {
+//            log.error("❌ Error en el test de colapso", e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+//                    .body(ResultadoAlgoritmoDTO.builder().mensaje("Error interno: " + e.getMessage()).build());
+//        }
     }
 }

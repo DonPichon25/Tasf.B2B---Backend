@@ -138,12 +138,12 @@ public class DataLoadService {
             // Contar SOLO pedidos de tipoData = 0 (data de prueba)
             // Usar listado y filtrar por tipoData para asegurar consistencia con otros filtros
             estado.totalPedidos = (int) pedidoService.listar().stream()
-                    .filter(p -> p.getTipoData() == 0)
+                    .filter(p -> p.getTipoData() == 1)
                     .count();
 
             // Contar pendientes entre los pedidos tipoData = 0
             estado.pedidosPendientes = (int) pedidoService.listar().stream()
-                    .filter(p -> p.getTipoData() == 0 && "PENDIENTE".equals(p.getEstado().toString()))
+                    .filter(p -> p.getTipoData() == 1 && "PENDIENTE".equals(p.getEstado().toString()))
                     .count();
 
             estado.exito = true;

@@ -112,5 +112,9 @@ public class AlnsRequestDTO {
     public void setInicioOperacionDiaADia(Boolean inicioOperacionDiaADia) {
         this.inicioOperacionDiaADia = inicioOperacionDiaADia;
     }
+
+    @Schema (description = "Session donde se encuentran todos los pedidos",
+            example = "default_session")
+    private String sessionId;
 }
 

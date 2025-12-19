@@ -6,6 +6,7 @@ import com.grupo5e.morapack.core.enums.EstadoAeropuerto;
 import com.grupo5e.morapack.core.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -143,7 +144,11 @@ public class FileParsingService {
         
         return result;
     }
-    
+    // Añadir este método a tu FileParsingService.java
+    public List<Pedido> parseOrders(MultipartFile file) throws Exception {
+        List<Aeropuerto> aeropuertos = aeropuertoService.listartipoData(1);
+        return parsePedidosFromBytes(file.getBytes(), aeropuertos);
+    }
     /**
      * Parsea aeropuertos desde bytes (adaptado de LectorAeropuerto)
      */
