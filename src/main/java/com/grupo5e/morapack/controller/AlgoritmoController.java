@@ -1155,7 +1155,7 @@ private List<VueloSimpleDTO> convertirVuelosADTOConTiempos(ArrayList<Vuelo> vuel
             log.info("⚠️ ADVERTENCIA: La ejecución semanal puede tomar 30-90 minutos");
             
             // Ejecutar algoritmo
-            return ejecutarAlgoritmo(solicitud,0);
+            return ejecutarAlgoritmo(solicitud,1);
             
         } catch (Exception e) {
             log.error("❌ Error ejecutando escenario semanal", e);
