@@ -3,6 +3,7 @@ package com.example.tasfb2b.util;
 import com.example.tasfb2b.model.Aeropuerto;
 import com.example.tasfb2b.model.Vuelo;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 public class TimeCalculator {
@@ -55,6 +56,14 @@ public class TimeCalculator {
         long espera = calcularTiempoEsperaMinutos(vueloActual, vueloSiguiente);
         // Regla 6: El tiempo mínimo de escala de la maleta es 10 minutos.
         return espera >= TIEMPO_MINIMO_ESCALA;
+    }
+
+    public static LocalDateTime calcularProximaSalidaUTC(LocalDateTime referenciaUTC, Vuelo vuelo, Aeropuerto aeroPartida) {
+        LocalDateTime referenciaLocal = referenciaUTC.plusHours(aeroPartida.getGmt());
+        LocalDateTime minSalidaLocal  = referenciaLocal.plusMinutes(TIEMPO_MINIMO_ESCALA);
+        LocalDateTime salidaLocal     = LocalDateTime.of(minSalidaLocal.toLocalDate(), vuelo.getHoraSalida());
+        if (salidaLocal.isBefore(minSalidaLocal)) salidaLocal = salidaLocal.plusDays(1);
+        return salidaLocal.minusHours(aeroPartida.getGmt());
     }
 
     // Calcula el castigo si el paquete llega tarde según el SLA

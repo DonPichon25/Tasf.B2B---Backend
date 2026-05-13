@@ -1,0 +1,15 @@
+[CFG] Directorio datos : C:\Users\Usuario\Documents\GitHub\MoraPack-Back\Caso\DATA
+[CFG] Plazos           : mismoCont=1440min, distintoCont=2880min
+[CFG] Escala/Liberacion: 10/10 min
+[CFG] Envios x archivo : 200 (tope global 60000)
+[CFG] Tabu max iter    : 60  lista=20
+Exception in thread "main" java.nio.file.NoSuchFileException: Caso\DATA\aeropuertos.txt
+	at java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:85)
+	at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:103)
+	at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:108)
+	at java.base/sun.nio.fs.WindowsFileSystemProvider.newByteChannel(WindowsFileSystemProvider.java:234)
+	at java.base/java.nio.file.Files.newByteChannel(Files.java:379)
+	at java.base/java.nio.file.Files.newByteChannel(Files.java:431)
+	at java.base/java.nio.file.Files.readAllBytes(Files.java:3268)
+	at com.grupo5e.morapack.tabusearch.io.CargadorAeropuertos.cargar(CargadorAeropuertos.java:41)
+	at com.grupo5e.morapack.tabusearch.MainTabuSearch.main(MainTabuSearch.java:79)

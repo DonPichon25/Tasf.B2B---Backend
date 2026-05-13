@@ -9,11 +9,16 @@ import com.example.tasfb2b.service.TabuSearchService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
+import com.example.tasfb2b.util.TimeCalculator;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.PrintWriter;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -47,7 +52,7 @@ public class SimulacionRunner implements CommandLineRunner {
         // =========================================================================
         // 🛠️ PANEL DE CONTROL: CAMBIA ESTA VARIABLE PARA ELEGIR QUÉ ESCENARIO SIMULAR 🛠️
         // =========================================================================
-        TipoEscenario escenarioActual = TipoEscenario.ESCENARIO_1_PRUEBA_RAPIDA;
+        TipoEscenario escenarioActual = TipoEscenario.ESCENARIO_2_PERIODO_REGULAR;
         // =========================================================================
 
         // 1. Definir rutas de archivos
@@ -98,19 +103,23 @@ public class SimulacionRunner implements CommandLineRunner {
         // 3. APLICAR FILTROS SEGÚN EL ESCENARIO ELEGIDO
         List<Pedido> pedidosAProcesar = new ArrayList<>();
         System.out.println("\n--- CONFIGURANDO " + escenarioActual + " ---");
+        LocalDateTime fechaInicio_1 = null;
+        LocalDateTime fechaFin_1 = null;
 
         switch (escenarioActual) {
             case ESCENARIO_1_PRUEBA_RAPIDA:
                 // Toma solo los primeros X pedidos
-                int limite = Math.min(25000 , pedidosTotales.size());
+                int limite = Math.min(100000 , pedidosTotales.size());
                 pedidosAProcesar = pedidosTotales.subList(0, limite);
                 System.out.println("Filtro: Se procesarán únicamente " + limite + " pedidos.");
                 break;
 
             case ESCENARIO_2_PERIODO_REGULAR:
                 // Filtra por fechas:
-                LocalDateTime fechaInicio = LocalDateTime.of(2026, 4, 1, 0, 0);
-                LocalDateTime fechaFin = LocalDateTime.of(2026, 7, 31, 0, 0);
+                LocalDateTime fechaInicio = LocalDateTime.of(2026, 5, 3, 0, 0);
+                LocalDateTime fechaFin = LocalDateTime.of(2026, 5, 10, 0, 0);
+                fechaFin_1 = fechaFin;
+                fechaInicio_1 = fechaInicio;
 
                 pedidosAProcesar = pedidosTotales.stream()
                         .filter(p -> !p.getFechaRegistro().isBefore(fechaInicio) && p.getFechaRegistro().isBefore(fechaFin))
@@ -169,43 +178,123 @@ public class SimulacionRunner implements CommandLineRunner {
             System.out.println("Tiempo de procesamiento: " + (tiempoFin - tiempoInicio) + " ms");
             imprimirMetricasSLA(mejorSolucion, aeropuertos, pedidosAProcesar);
 
-            // 5. Exportación a TXT Mejorada
-            String rutaExportacion = "resultados_" + escenarioActual.name() + ".txt";
-            System.out.println("\nExportando el reporte de rutas a: " + rutaExportacion + " ...");
-
-            try (PrintWriter writer = new PrintWriter(new FileWriter(rutaExportacion))) {
-                writer.println("==============================================");
-                writer.println("REPORTE DE RUTAS - " + escenarioActual);
-                writer.println("==============================================");
-
-                if (escenarioActual == TipoEscenario.ESCENARIO_2_PERIODO_REGULAR) {
-                    writer.println("PERIODO EVALUADO: 01-04-2026 al 31-07-2026");
-                }
-
-                writer.println("Costo Final (Fitness): " + mejorSolucion.getFitness());
-                writer.println("Total de pedidos procesados: " + pedidosAProcesar.size());
-                writer.println("Tiempo de procesamiento: " + (tiempoFin - tiempoInicio) + " ms");
-                writer.println("----------------------------------------------\n");
-
-                // ORDENAR POR ID PARA MAYOR CLARIDAD
-                mejorSolucion.getRutasAsignadas().entrySet().stream()
-                        .sorted(Map.Entry.comparingByKey())
-                        .forEach(entry -> {
-                            List<Vuelo> ruta = entry.getValue();
-                            writer.print("Pedido " + entry.getKey() + " (" + ruta.size() + " tramos) -> ");
-                            for (Vuelo v : ruta) {
-                                writer.print("[" + v.getOrigen() + " a " + v.getDestino() + "] ");
-                            }
-                            writer.println();
-                        });
-
-                System.out.println("¡Exportación completada! El archivo está ordenado por ID.");
-            } catch (Exception e) {
-                System.err.println("Error al intentar exportar los resultados: " + e.getMessage());
-            }
+            // 5. Exportación JSON
+            exportarAsignacionesJSON(mejorSolucion, pedidosAProcesar, aeropuertos,
+                escenarioActual, tiempoFin, tiempoInicio);
 
         } else {
             System.err.println("❌ Error: No hay datos para procesar con los filtros actuales.");
+        }
+    }
+
+    // --- EXPORTACIÓN JSON ---
+
+    private static final DateTimeFormatter FMT_UTC =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
+    private void exportarAsignacionesJSON(Solucion mejorSolucion, List<Pedido> pedidosAProcesar,
+            List<Aeropuerto> aeropuertos, TipoEscenario escenario,
+            long tiempoFin, long tiempoInicio) {
+
+        Map<String, Pedido> mapaPedidos = new HashMap<>();
+        for (Pedido p : pedidosAProcesar) mapaPedidos.put(p.getIdPedido(), p);
+        Map<String, Aeropuerto> mapaAeros = new HashMap<>();
+        for (Aeropuerto a : aeropuertos) mapaAeros.put(a.getCodigo(), a);
+
+        List<Map.Entry<String, List<Vuelo>>> entries = new ArrayList<>(
+            mejorSolucion.getRutasAsignadas().entrySet());
+        entries.sort(Map.Entry.comparingByKey());
+
+        String rutaSalida = "resultados_" + escenario.name() + ".txt";
+        System.out.println("\nExportando el reporte de rutas a: " + rutaSalida + " ...");
+
+        try (PrintWriter w = new PrintWriter(new BufferedWriter(new FileWriter(rutaSalida)))) {
+            w.println("{");
+            w.println("  \"escenario\": \"" + escenario.name() + "\",");
+            w.println("  \"fitness\": " + mejorSolucion.getFitness() + ",");
+            w.println("  \"tiempoMs\": " + (tiempoFin - tiempoInicio) + ",");
+            w.println("  \"totalPedidos\": " + pedidosAProcesar.size() + ",");
+            w.println("  \"asignaciones\": [");
+
+            boolean primeraPedido = true;
+            for (Map.Entry<String, List<Vuelo>> entry : entries) {
+                Pedido pedido = mapaPedidos.get(entry.getKey());
+                if (pedido == null) continue;
+                List<Vuelo> ruta = entry.getValue();
+
+                Aeropuerto aeroOrigen  = mapaAeros.get(pedido.getOrigen());
+                Aeropuerto aeroDestino = mapaAeros.get(pedido.getDestino());
+                if (aeroOrigen == null || aeroDestino == null) continue;
+
+                // fechaRegistro está en hora local del aeropuerto origen → convertir a UTC
+                LocalDateTime creacionUTC = pedido.getFechaRegistro().minusHours(aeroOrigen.getGmt());
+                boolean mismoCont = aeroOrigen.getContinente().equals(aeroDestino.getContinente());
+                LocalDateTime deadlineUTC = creacionUTC.plusHours(mismoCont ? 24 : 48);
+                LocalDate creacionLocalDate = pedido.getFechaRegistro().toLocalDate();
+
+                if (!primeraPedido) w.println(",");
+                primeraPedido = false;
+
+                w.println("    {");
+                w.println("      \"pedidoId\": \"" + pedido.getIdPedido() + "\",");
+                w.println("      \"origen\": \"" + pedido.getOrigen() + "\",");
+                w.println("      \"destino\": \"" + pedido.getDestino() + "\",");
+                w.println("      \"creacion\": \"" + creacionUTC.format(FMT_UTC) + "\",");
+                w.println("      \"deadline\": \"" + deadlineUTC.format(FMT_UTC) + "\",");
+                w.println("      \"paquetes\": " + pedido.getCantidadMaletas() + ",");
+                w.println("      \"ruta\": [");
+
+                LocalDateTime tiempoActualUTC = creacionUTC;
+                boolean primerVuelo = true;
+
+                for (int i = 0; i < ruta.size(); i++) {
+                    Vuelo v = ruta.get(i);
+                    Aeropuerto aOrig = mapaAeros.get(v.getOrigen());
+                    Aeropuerto aDest = mapaAeros.get(v.getDestino());
+                    if (aOrig == null || aDest == null) continue;
+
+                    LocalDateTime salidaUTC  = TimeCalculator.calcularProximaSalidaUTC(tiempoActualUTC, v, aOrig);
+                    long duracion            = TimeCalculator.calcularDuracionVueloMinutos(v, aOrig, aDest);
+                    LocalDateTime llegadaUTC = salidaUTC.plusMinutes(duracion);
+
+                    // dN = offset en días entre la fecha local de creación y la fecha local de salida
+                    LocalDate salidaLocalDate = salidaUTC.plusHours(aOrig.getGmt()).toLocalDate();
+                    long dayOffset = ChronoUnit.DAYS.between(creacionLocalDate, salidaLocalDate);
+                    String dN = "d" + (dayOffset + 1);
+
+                    String vueloId = v.getOrigen() + "-" + v.getDestino() + "-"
+                        + v.getHoraSalida().format(DateTimeFormatter.ofPattern("HH:mm")) + "-" + dN;
+
+                    if (!primerVuelo) w.println(",");
+                    primerVuelo = false;
+
+                    w.println("        {");
+                    w.println("          \"vueloId\": \"" + vueloId + "\",");
+                    w.println("          \"origen\": \"" + v.getOrigen() + "\",");
+                    w.println("          \"destino\": \"" + v.getDestino() + "\",");
+                    w.println("          \"salida\": \"" + salidaUTC.format(FMT_UTC) + "\",");
+                    w.print(  "          \"llegada\": \"" + llegadaUTC.format(FMT_UTC) + "\"");
+                    w.println();
+                    w.print(  "        }");
+
+                    tiempoActualUTC = llegadaUTC;
+                    if (i < ruta.size() - 1)
+                        tiempoActualUTC = tiempoActualUTC.plusMinutes(
+                            TimeCalculator.calcularTiempoEsperaMinutos(v, ruta.get(i + 1)));
+                }
+
+                w.println();
+                w.println("      ]");
+                w.print(  "    }");
+            }
+
+            w.println();
+            w.println("  ]");
+            w.println("}");
+
+            System.out.println("¡Exportación completada! " + entries.size() + " asignaciones.");
+        } catch (Exception e) {
+            System.err.println("Error al exportar: " + e.getMessage());
         }
     }
 
@@ -249,7 +338,9 @@ public class SimulacionRunner implements CommandLineRunner {
                 Vuelo v = ruta.get(i);
 
                 // VALIDACIÓN DE CAPACIDAD DE VUELO
-                String idVueloUnico = v.getOrigen() + "-" + v.getDestino() + "-" + v.getHoraSalida();
+                // La clave incluye la fecha porque el mismo vuelo puede operar varios días con distinta ocupación
+                String idVueloUnico = v.getOrigen() + "-" + v.getDestino() + "-" + v.getHoraSalida()
+                    + "_" + tiempoActual.toLocalDate();
                 int maletasEnEsteVuelo = solucion.getOcupacionVuelos().getOrDefault(idVueloUnico, 0);
 
                 if (maletasEnEsteVuelo > v.getCapacidadMax()) {
