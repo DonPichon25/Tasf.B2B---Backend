@@ -102,39 +102,45 @@ public class SimulacionRunner implements CommandLineRunner {
 
         // 3. APLICAR FILTROS SEGÚN EL ESCENARIO ELEGIDO
         List<Pedido> pedidosAProcesar = new ArrayList<>();
+        List<Pedido> pedidosHistoricos = new ArrayList<>(); // ¡NUEVA LISTA PARA PRESIMULACIÓN!
+
         System.out.println("\n--- CONFIGURANDO " + escenarioActual + " ---");
         LocalDateTime fechaInicio_1 = null;
         LocalDateTime fechaFin_1 = null;
 
         switch (escenarioActual) {
             case ESCENARIO_1_PRUEBA_RAPIDA:
-                // Toma solo los primeros X pedidos
                 int limite = Math.min(100000 , pedidosTotales.size());
                 pedidosAProcesar = pedidosTotales.subList(0, limite);
                 System.out.println("Filtro: Se procesarán únicamente " + limite + " pedidos.");
                 break;
 
             case ESCENARIO_2_PERIODO_REGULAR:
-                // Filtra por fechas:
-                LocalDateTime fechaInicio = LocalDateTime.of(2026, 5, 3, 0, 0);
-                LocalDateTime fechaFin = LocalDateTime.of(2026, 5, 10, 0, 0);
+                LocalDateTime fechaInicio = LocalDateTime.of(2026, 5, 15, 0, 0);
+                LocalDateTime fechaFin = LocalDateTime.of(2026, 5, 20, 0, 0);
                 fechaFin_1 = fechaFin;
                 fechaInicio_1 = fechaInicio;
+
+                // Separamos la historia (el "warm-up") de la simulación real
+                pedidosHistoricos = pedidosTotales.stream()
+                        .filter(p -> p.getFechaRegistro().isBefore(fechaInicio))
+                        .toList();
 
                 pedidosAProcesar = pedidosTotales.stream()
                         .filter(p -> !p.getFechaRegistro().isBefore(fechaInicio) && p.getFechaRegistro().isBefore(fechaFin))
                         .toList();
-                System.out.println("Filtro: Pedidos entre " + fechaInicio.toLocalDate() + " y " + fechaFin.toLocalDate());
+
+                System.out.println("Filtro: " + pedidosHistoricos.size() + " pedidos históricos para presimulación.");
+                System.out.println("Filtro: " + pedidosAProcesar.size() + " pedidos reales entre " + fechaInicio.toLocalDate() + " y " + fechaFin.toLocalDate());
                 break;
 
             case ESCENARIO_3_COLAPSO_TOTAL:
-                // Sin filtros
                 pedidosAProcesar = pedidosTotales;
                 System.out.println("Filtro: NINGUNO. Advertencia, alto consumo de RAM y tiempo de CPU.");
                 break;
         }
 
-        System.out.println("Total de pedidos a procesar en este escenario: " + pedidosAProcesar.size());
+        System.out.println("Total de pedidos de simulación: " + pedidosAProcesar.size());
         System.out.println("==============================================\n");
 
         // 4. Disparar la metaheurística
@@ -167,7 +173,8 @@ public class SimulacionRunner implements CommandLineRunner {
 
             long tiempoInicio = System.currentTimeMillis();
 
-            Solucion mejorSolucion = tabuSearchService.ejecutarOptimizacion(pedidosAProcesar, vuelos, aeropuertos);
+            // NUEVA LLAMADA: Pasamos los históricos primero
+            Solucion mejorSolucion = tabuSearchService.ejecutarOptimizacion(pedidosHistoricos, pedidosAProcesar, vuelos, aeropuertos);
 
             long tiempoFin = System.currentTimeMillis();
 
@@ -301,14 +308,12 @@ public class SimulacionRunner implements CommandLineRunner {
     // --- MÉTODO PARA EXPERIMENTACIÓN NUMÉRICA ---
     private void imprimirMetricasSLA(Solucion solucion, List<Aeropuerto> aeropuertos, List<Pedido> pedidosAProcesar) {
         int pedidosLegales = 0;
-        int totalPedidos = solucion.getRutasAsignadas().size();
+
+        // CORRECCIÓN 1: El total ahora es exactamente la cantidad de pedidos de la simulación
+        int totalPedidos = pedidosAProcesar.size();
         Integer primerPedidoColapsado = null;
 
         if (totalPedidos == 0) return;
-
-        // OPTIMIZACIÓN: Mapas de búsqueda rápida
-        Map<String, Pedido> mapaPedidos = new java.util.HashMap<>();
-        for (Pedido p : pedidosAProcesar) mapaPedidos.put(p.getIdPedido(), p);
 
         Map<String, Aeropuerto> mapaAeros = new java.util.HashMap<>();
         for (Aeropuerto a : aeropuertos) mapaAeros.put(a.getCodigo(), a);
@@ -316,18 +321,21 @@ public class SimulacionRunner implements CommandLineRunner {
         // Contadores para el diagnóstico
         int fallasSLA = 0;
         int fallasVuelo = 0;
-        int fallasAlmacen = 0;
         Map<String, Integer> cuellosBotella = new java.util.HashMap<>();
 
         int contadorGlobal = 0;
 
-        for (Map.Entry<String, List<Vuelo>> entry : solucion.getRutasAsignadas().entrySet()) {
+        // CORRECCIÓN 2: Iteramos exclusivamente sobre los pedidos de mayo (ignorando los de enero-abril)
+        for (Pedido pedidoReal : pedidosAProcesar) {
             contadorGlobal++;
-            String idPedido = entry.getKey();
-            List<Vuelo> ruta = entry.getValue();
-            if (ruta.isEmpty()) continue;
+            List<Vuelo> ruta = solucion.getRutasAsignadas().get(pedidoReal.getIdPedido());
 
-            Pedido pedidoReal = mapaPedidos.get(idPedido);
+            // Si el pedido no tiene ruta asignada
+            if (ruta == null || ruta.isEmpty()) {
+                if (primerPedidoColapsado == null) primerPedidoColapsado = contadorGlobal;
+                continue;
+            }
+
             java.time.LocalDateTime tiempoActual = pedidoReal.getFechaRegistro();
 
             long tiempoRutaMinutos = 0;
@@ -338,9 +346,8 @@ public class SimulacionRunner implements CommandLineRunner {
                 Vuelo v = ruta.get(i);
 
                 // VALIDACIÓN DE CAPACIDAD DE VUELO
-                // La clave incluye la fecha porque el mismo vuelo puede operar varios días con distinta ocupación
                 String idVueloUnico = v.getOrigen() + "-" + v.getDestino() + "-" + v.getHoraSalida()
-                    + "_" + tiempoActual.toLocalDate();
+                        + "_" + tiempoActual.toLocalDate();
                 int maletasEnEsteVuelo = solucion.getOcupacionVuelos().getOrDefault(idVueloUnico, 0);
 
                 if (maletasEnEsteVuelo > v.getCapacidadMax()) {
@@ -405,7 +412,6 @@ public class SimulacionRunner implements CommandLineRunner {
         if (primerPedidoColapsado != null) {
             System.out.println("-> [ALERTA] Punto de colapso detectado en el pedido número: " + primerPedidoColapsado);
 
-            // --- NUEVO DIAGNÓSTICO ENTENDIBLE ---
             System.out.println("\n--- DIAGNÓSTICO DE FALLAS ---");
             if (fallasSLA > 0) System.out.println("  * Por SLA (Tiempo excedido): " + fallasSLA);
             if (fallasVuelo > 0) System.out.println("  * Por Vuelos llenos: " + fallasVuelo);
