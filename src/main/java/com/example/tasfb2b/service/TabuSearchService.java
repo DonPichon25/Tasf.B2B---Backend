@@ -119,6 +119,13 @@ public class TabuSearchService {
         mejorSolucion.setFitness(mejorFitnessGlobal);
         mejorSolucion.setRutasAsignadas(mejorRutasGlobal);
 
+        // NUEVO: Agregar las capacidades máximas de todos los vuelos a la solución
+        // Para que el frontend pueda calcular los porcentajes de ocupación reales
+        for (Vuelo vuelo : vuelosTotales) {
+            String llaveBase = vuelo.getOrigen() + "-" + vuelo.getDestino() + "-" + vuelo.getHoraSalida();
+            mejorSolucion.getCapacidadesVuelos().put(llaveBase, vuelo.getCapacidadMax());
+        }
+
         // Registrar el impacto de TODOS los pedidos para que los diagnósticos mapeen bien la capacidad
         List<Pedido> todosLosPedidos = new ArrayList<>();
         if (pedidosHistoricos != null) todosLosPedidos.addAll(pedidosHistoricos);
@@ -132,6 +139,33 @@ public class TabuSearchService {
 
         // Diagnóstico solo para verificar los de la simulación
         realizarDiagnosticoColapso(mejorSolucion, pedidosSimulacion, mapaAeros, mapaVuelos);
+
+        int cumplidosSLA = 0;
+        long sumaIntra = 0, countIntra = 0;
+        long sumaInter = 0, countInter = 0;
+
+        for (Pedido p : pedidosSimulacion) {
+            List<Vuelo> ruta = mejorRutasGlobal.get(p.getIdPedido());
+            if (ruta == null) continue;
+
+            long tiempoMinutos = calcularSoloTiempoEnMinutos(p, ruta, mapaAeros);
+            Aeropuerto o = mapaAeros.get(p.getOrigen());
+            Aeropuerto d = mapaAeros.get(p.getDestino());
+
+            boolean esIntra = o.getContinente().equals(d.getContinente());
+            long limite = esIntra ? 1440 : 2880;
+
+            if (tiempoMinutos <= limite) cumplidosSLA++;
+
+            if (esIntra) { sumaIntra += tiempoMinutos; countIntra++; }
+            else { sumaInter += tiempoMinutos; countInter++; }
+        }
+
+        mejorSolucion.setTotalPedidos(pedidosSimulacion.size());
+        mejorSolucion.setTasaExito(pedidosSimulacion.isEmpty() ? 0 : (cumplidosSLA * 100.0 / pedidosSimulacion.size()));
+        mejorSolucion.setTiempoPromedioIntra(countIntra == 0 ? 0 : (sumaIntra / 60.0 / countIntra));
+        mejorSolucion.setTiempoPromedioInter(countInter == 0 ? 0 : (sumaInter / 60.0 / countInter));
+
         return mejorSolucion;
     }
 
