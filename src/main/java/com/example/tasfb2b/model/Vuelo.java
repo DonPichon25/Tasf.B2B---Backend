@@ -14,7 +14,4 @@ public class Vuelo {
     private LocalTime horaSalida;  // Ej. 03:34
     private LocalTime horaLlegada; // Ej. 04:21
     private int capacidadMax;      // Ej. 300
-
-    // Capacidad dinámica para la Búsqueda Tabú
-    private int maletasAsignadas = 0;
 }

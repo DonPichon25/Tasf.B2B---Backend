@@ -22,14 +22,4 @@ public class Solucion {
         this.ocupacionAeropuertos = new HashMap<>();
         this.fitness = Double.MAX_VALUE;
     }
-
-    public Solucion clonar() {
-        Solucion copia = new Solucion();
-        copia.setFitness(this.fitness);
-        copia.setRutasAsignadas(new HashMap<>(this.rutasAsignadas));
-        copia.setOcupacionVuelos(new HashMap<>(this.ocupacionVuelos));
-        // Clonamos la memoria de los aeropuertos para que los vecinos no pisen los datos
-        copia.setOcupacionAeropuertos(new HashMap<>(this.ocupacionAeropuertos));
-        return copia;
-    }
 }
