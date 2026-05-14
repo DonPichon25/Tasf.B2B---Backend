@@ -116,8 +116,13 @@ public class SimulacionRunner implements CommandLineRunner {
                 break;
 
             case ESCENARIO_2_PERIODO_REGULAR:
+                // Estas variables luego serán los parámetros que mande React (Frontend)
                 LocalDateTime fechaInicio = LocalDateTime.of(2026, 5, 15, 0, 0);
-                LocalDateTime fechaFin = LocalDateTime.of(2026, 5, 20, 0, 0);
+                int diasSimulacion = 5; // Ej: 3, 5 o 7 días
+
+                // Calculamos la fecha fin automáticamente sumando los días
+                LocalDateTime fechaFin = fechaInicio.plusDays(diasSimulacion);
+
                 fechaFin_1 = fechaFin;
                 fechaInicio_1 = fechaInicio;
 
