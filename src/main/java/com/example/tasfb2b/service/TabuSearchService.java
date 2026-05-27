@@ -32,8 +32,8 @@ public class TabuSearchService {
         String atributoTabu
     ) {}
 
-    public Solucion ejecutarOptimizacion(List<Pedido> pedidos, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos) {
-        System.out.println("Iniciando Búsqueda Tabú para " + pedidos.size() + " pedidos...");
+    public Solucion ejecutarOptimizacion(List<Pedido> pedidosHistoricos, List<Pedido> pedidosSimulacion, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos) {
+        System.out.println("Iniciando Búsqueda Tabú para " + pedidosSimulacion.size() + " pedidos de simulación...");
 
         Map<String, Aeropuerto> mapaAeros = new HashMap<>();
         for (Aeropuerto a : aeropuertos) mapaAeros.put(a.getCodigo(), a);
@@ -51,9 +51,12 @@ public class TabuSearchService {
         for (Vuelo v : vuelosTotales)
             vuelosPorOrigen.computeIfAbsent(v.getOrigen(), k -> new ArrayList<>()).add(v);
 
-        // 1. Solución inicial voraz
-        Solucion solucionActual = generarSolucionInicialVoraz(pedidos, vuelosPorOrigen, mapaAeros);
-        solucionActual.setFitness(evaluarFitness(solucionActual, pedidos, mapaAeros, mapaVuelos));
+        // 1. Solución inicial voraz para pedidos de simulación
+        // Nota: los pedidos históricos (pedidosHistoricos) ya definen el contexto temporal desde
+        // SimulacionController, pero las claves de capacidad son por fecha (ej: "LIM-BOG-08:00_2026-07-05"),
+        // por lo que pedidos de meses anteriores no bloquean slots de la ventana de simulación.
+        Solucion solucionActual = generarSolucionInicialVoraz(pedidosSimulacion, vuelosPorOrigen, mapaAeros);
+        solucionActual.setFitness(evaluarFitness(solucionActual, pedidosSimulacion, mapaAeros, mapaVuelos));
 
         // Tracking del mejor global: solo fitness + rutas (sin clonar mapas de ocupación)
         double mejorFitnessGlobal = solucionActual.getFitness();
@@ -71,7 +74,7 @@ public class TabuSearchService {
 
             // A. Generar movimientos candidatos — SIN clonar la solución
             List<Movimiento> movimientos = generarMovimientos(
-                solucionActual, pedidos, vuelosPorOrigen, mapaAeros, mapaVuelos);
+                solucionActual, pedidosSimulacion, vuelosPorOrigen, mapaAeros, mapaVuelos);
 
             // B. Seleccionar mejor movimiento admisible
             Movimiento mejorMovimiento = null;
@@ -110,17 +113,17 @@ public class TabuSearchService {
 
         System.out.println("Optimización finalizada.");
 
-        // Reconstruir la solución final con las mejores rutas
+        // Reconstruir la solución final con las mejores rutas (solo pedidos de simulación)
         Solucion mejorSolucion = new Solucion();
         mejorSolucion.setFitness(mejorFitnessGlobal);
         mejorSolucion.setRutasAsignadas(mejorRutasGlobal);
-        for (Pedido pedido : pedidos) {
+        for (Pedido pedido : pedidosSimulacion) {
             List<Vuelo> ruta = mejorRutasGlobal.get(pedido.getIdPedido());
             if (ruta != null && !ruta.isEmpty())
                 registrarImpactoAeropuertos(mejorSolucion, pedido, ruta, 1, mapaAeros);
         }
 
-        realizarDiagnosticoColapso(mejorSolucion, pedidos, mapaAeros, mapaVuelos);
+        realizarDiagnosticoColapso(mejorSolucion, pedidosSimulacion, mapaAeros, mapaVuelos);
         return mejorSolucion;
     }
 
@@ -132,6 +135,28 @@ public class TabuSearchService {
             Map<String, List<Vuelo>> vuelosPorOrigen,
             Map<String, Aeropuerto> mapaAeros) {
         Solucion solInicial = new Solucion();
+        for (Pedido pedido : pedidos) {
+            List<Vuelo> rutaAsignada = buscarRutaBFS(
+                pedido.getOrigen(), pedido.getDestino(),
+                vuelosPorOrigen, pedido.getFechaRegistro(), mapaAeros,
+                solInicial.getOcupacionVuelos(), pedido.getCantidadMaletas());
+            if (!rutaAsignada.isEmpty()) {
+                solInicial.getRutasAsignadas().put(pedido.getIdPedido(), new ArrayList<>(rutaAsignada));
+                registrarImpactoAeropuertos(solInicial, pedido, rutaAsignada, 1, mapaAeros);
+            }
+        }
+        return solInicial;
+    }
+
+    // Variante que parte de un estado de ocupación pre-existente (warm-up histórico)
+    private Solucion generarSolucionInicialVorazConEstado(List<Pedido> pedidos,
+            Map<String, List<Vuelo>> vuelosPorOrigen,
+            Map<String, Aeropuerto> mapaAeros,
+            Solucion baseState) {
+        Solucion solInicial = new Solucion();
+        // Copiar estado de ocupación del warm-up para respetar capacidades ya utilizadas
+        solInicial.getOcupacionVuelos().putAll(baseState.getOcupacionVuelos());
+        solInicial.getOcupacionAeropuertos().putAll(baseState.getOcupacionAeropuertos());
         for (Pedido pedido : pedidos) {
             List<Vuelo> rutaAsignada = buscarRutaBFS(
                 pedido.getOrigen(), pedido.getDestino(),

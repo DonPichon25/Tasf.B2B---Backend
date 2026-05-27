@@ -9,10 +9,14 @@ import java.util.Map;
 public class Solucion {
     private Map<String, List<Vuelo>> rutasAsignadas;
     private Map<String, Integer> ocupacionVuelos;
-
-    // NUEVO: Registro contable diario de los aeropuertos.
-    // Guardará llaves como "MAD_2026-04-14" -> 450 maletas
     private Map<String, Integer> ocupacionAeropuertos;
+
+    // Campos que necesita el frontend para renderizar aviones y métricas
+    private Map<String, Integer> capacidadesVuelos;   // "LIM-BOG-08:00" → capacidadMax
+    private int totalPedidos;
+    private double tasaExito;
+    private double tiempoPromedioIntra;
+    private double tiempoPromedioInter;
 
     private double fitness;
 
@@ -20,6 +24,7 @@ public class Solucion {
         this.rutasAsignadas = new HashMap<>();
         this.ocupacionVuelos = new HashMap<>();
         this.ocupacionAeropuertos = new HashMap<>();
+        this.capacidadesVuelos = new HashMap<>();
         this.fitness = Double.MAX_VALUE;
     }
 

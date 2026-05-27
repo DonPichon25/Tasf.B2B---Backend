@@ -1,3 +1,4 @@
+/*
 package com.example.tasfb2b;
 
 import com.example.tasfb2b.model.Aeropuerto;
@@ -167,7 +168,7 @@ public class SimulacionRunner implements CommandLineRunner {
 
             long tiempoInicio = System.currentTimeMillis();
 
-            Solucion mejorSolucion = tabuSearchService.ejecutarOptimizacion(pedidosAProcesar, vuelos, aeropuertos);
+            Solucion mejorSolucion = tabuSearchService.ejecutarOptimizacion(new ArrayList<>(), pedidosAProcesar, vuelos, aeropuertos);
 
             long tiempoFin = System.currentTimeMillis();
 
@@ -337,8 +338,6 @@ public class SimulacionRunner implements CommandLineRunner {
             for (int i = 0; i < ruta.size(); i++) {
                 Vuelo v = ruta.get(i);
 
-                // VALIDACIÓN DE CAPACIDAD DE VUELO
-                // La clave incluye la fecha porque el mismo vuelo puede operar varios días con distinta ocupación
                 String idVueloUnico = v.getOrigen() + "-" + v.getDestino() + "-" + v.getHoraSalida()
                     + "_" + tiempoActual.toLocalDate();
                 int maletasEnEsteVuelo = solucion.getOcupacionVuelos().getOrDefault(idVueloUnico, 0);
@@ -348,7 +347,6 @@ public class SimulacionRunner implements CommandLineRunner {
                     fallasVuelo++;
                 }
 
-                // Uso del mapa optimizado
                 Aeropuerto origen = mapaAeros.get(v.getOrigen());
                 Aeropuerto destino = mapaAeros.get(v.getDestino());
 
@@ -357,7 +355,6 @@ public class SimulacionRunner implements CommandLineRunner {
                     tiempoRutaMinutos += duracionVuelo;
                     tiempoActual = tiempoActual.plusMinutes(duracionVuelo);
 
-                    // VALIDACIÓN DE ALMACÉN
                     String diaDestino = tiempoActual.toLocalDate().toString();
                     String keyDestino = destino.getCodigo() + "_" + diaDestino;
                     int maletasEseDia = solucion.getOcupacionAeropuertos().getOrDefault(keyDestino, 0);
@@ -395,7 +392,6 @@ public class SimulacionRunner implements CommandLineRunner {
             }
         }
 
-        // --- SALIDA ORIGINAL ---
         double porcentaje = ((double) pedidosLegales / totalPedidos) * 100.0;
         double porcentajeReal = Math.floor(porcentaje * 100) / 100.0;
 
@@ -404,8 +400,6 @@ public class SimulacionRunner implements CommandLineRunner {
 
         if (primerPedidoColapsado != null) {
             System.out.println("-> [ALERTA] Punto de colapso detectado en el pedido número: " + primerPedidoColapsado);
-
-            // --- NUEVO DIAGNÓSTICO ENTENDIBLE ---
             System.out.println("\n--- DIAGNÓSTICO DE FALLAS ---");
             if (fallasSLA > 0) System.out.println("  * Por SLA (Tiempo excedido): " + fallasSLA);
             if (fallasVuelo > 0) System.out.println("  * Por Vuelos llenos: " + fallasVuelo);
@@ -418,3 +412,4 @@ public class SimulacionRunner implements CommandLineRunner {
         }
     }
 }
+*/
