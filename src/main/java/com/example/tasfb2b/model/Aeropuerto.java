@@ -1,22 +1,29 @@
 package com.example.tasfb2b.model;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Data // Lombok genera Getters, Setters y toString automáticamente
+@Entity
+@Table(name = "aeropuertos")
+@Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class Aeropuerto {
-    private String codigo;        // Ej. SKBO
-    private String nombre;        // Ej. Bogota
-    private String pais;          // Ej. Colombia
-    private String continente;    // Ej. America del Sur
-    private int gmt;              // Ej. -5
-    private int capacidadMax;     // Ej. 430
-    private double latitud;       // En formato decimal para React luego (opcional por ahora)
+    @Id
+    private String codigo;
+    private String nombre;
+    private String pais;
+    private String continente;
+    private int gmt;
+    private int capacidadMax;
+    private double latitud;
     private double longitud;
 
-    // Capacidad dinámica durante la simulación
+    @Transient
     private int maletasActuales = 0;
 }

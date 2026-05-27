@@ -31,3 +31,5 @@ build/
 
 ### VS Code ###
 .vscode/
+src/main/resources/data/envios/cargar_pedidos.sql
+src/main/resources/data/envios/cargar_pedidos.sql

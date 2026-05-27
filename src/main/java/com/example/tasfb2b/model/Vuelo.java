@@ -1,20 +1,24 @@
 package com.example.tasfb2b.model;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.time.LocalTime;
 
+@Entity
+@Table(name = "vuelos")
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class Vuelo {
-    private String origen;         // Ej. SKBO
-    private String destino;        // Ej. SEQM
-    private LocalTime horaSalida;  // Ej. 03:34
-    private LocalTime horaLlegada; // Ej. 04:21
-    private int capacidadMax;      // Ej. 300
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    // Capacidad dinámica para la Búsqueda Tabú
-    private int maletasAsignadas = 0;
+    private String origen;
+    private String destino;
+    private LocalTime horaSalida;
+    private LocalTime horaLlegada;
+    private int capacidadMax;
 }
