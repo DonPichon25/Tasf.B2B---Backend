@@ -80,7 +80,6 @@ public class DataCargaService {
 
     @Transactional
     public int cargarEnvios(MultipartFile[] archivos) throws IOException {
-        pedidoRepository.deleteAllInBatch();
         int total = 0;
         for (MultipartFile archivo : archivos) {
             List<Pedido> pedidos = lector.leerEnviosDesdeStream(
@@ -88,7 +87,7 @@ public class DataCargaService {
                     archivo.getOriginalFilename()
             );
             jdbc.batchUpdate(
-                "INSERT INTO pedidos (id_pedido, origen, destino, fecha_registro, cantidad_maletas, id_cliente) VALUES (?,?,?,?,?,?)",
+                "INSERT IGNORE INTO pedidos (id_pedido, origen, destino, fecha_registro, cantidad_maletas, id_cliente) VALUES (?,?,?,?,?,?)",
                 pedidos,
                 BATCH_SIZE,
                 (ps, p) -> {
