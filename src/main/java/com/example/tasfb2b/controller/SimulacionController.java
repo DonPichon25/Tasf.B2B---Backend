@@ -84,7 +84,7 @@ public class SimulacionController {
                     "No hay pedidos en el periodo seleccionado (" + inicio + " → " + fin + ").");
         }
 
-        Solucion solucion = tabuSearchService.ejecutarOptimizacion(pedidosHistoricos, pedidosSimulacion, vuelos, aeropuertos);
+        Solucion solucion = tabuSearchService.ejecutarOptimizacion(pedidosHistoricos, pedidosSimulacion, vuelos, aeropuertos, 500);
 
         // ── 1. capacidadesVuelos: necesario para colorear aviones en el mapa ──
         Map<String, Integer> caps = new HashMap<>();
