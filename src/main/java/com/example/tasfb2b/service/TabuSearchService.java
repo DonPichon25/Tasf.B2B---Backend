@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 @Service
 public class TabuSearchService {
 
-    private static final int ITERACIONES_MAXIMAS = 500;
     private static final int TABU_TENURE = 30;
     private static final int MAX_SIN_MEJORA = 200;
     private static final int MAX_ESPERA_MINUTOS = 18 * 60;
@@ -32,7 +31,7 @@ public class TabuSearchService {
         String atributoTabu
     ) {}
 
-    public Solucion ejecutarOptimizacion(List<Pedido> pedidosHistoricos, List<Pedido> pedidosSimulacion, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos) {
+    public Solucion ejecutarOptimizacion(List<Pedido> pedidosHistoricos, List<Pedido> pedidosSimulacion, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos, int iteracionesMaximas) {
         System.out.println("Iniciando Búsqueda Tabú para " + pedidosSimulacion.size() + " pedidos de simulación...");
 
         Map<String, Aeropuerto> mapaAeros = new HashMap<>();
@@ -51,11 +50,19 @@ public class TabuSearchService {
         for (Vuelo v : vuelosTotales)
             vuelosPorOrigen.computeIfAbsent(v.getOrigen(), k -> new ArrayList<>()).add(v);
 
-        // 1. Solución inicial voraz para pedidos de simulación
-        // Nota: los pedidos históricos (pedidosHistoricos) ya definen el contexto temporal desde
-        // SimulacionController, pero las claves de capacidad son por fecha (ej: "LIM-BOG-08:00_2026-07-05"),
-        // por lo que pedidos de meses anteriores no bloquean slots de la ventana de simulación.
-        Solucion solucionActual = generarSolucionInicialVoraz(pedidosSimulacion, vuelosPorOrigen, mapaAeros);
+        // 0. WARM-UP HISTÓRICO: Pre-llenar la red con los pedidos del pasado usando solo el algoritmo Voraz
+        Solucion estadoBase = new Solucion();
+        if (pedidosHistoricos != null && !pedidosHistoricos.isEmpty()) {
+            estadoBase = generarSolucionInicialVoraz(pedidosHistoricos, vuelosPorOrigen, mapaAeros);
+            // Nota: El histórico no se optimiza con Tabú porque ya pasó, solo nos interesa su impacto físico
+        }
+
+        // 1. Solución inicial voraz para pedidos de simulación (AHORA PARTIENDO DEL ESTADO BASE)
+        Solucion solucionActual = generarSolucionInicialVorazConEstado(pedidosSimulacion, vuelosPorOrigen, mapaAeros, estadoBase);
+
+        // Guardamos también las rutas históricas para que el mapa pueda dibujar los aviones que ya venían volando
+        solucionActual.getRutasAsignadas().putAll(estadoBase.getRutasAsignadas());
+
         solucionActual.setFitness(evaluarFitness(solucionActual, pedidosSimulacion, mapaAeros, mapaVuelos));
 
         // Tracking del mejor global: solo fitness + rutas (sin clonar mapas de ocupación)
@@ -66,7 +73,7 @@ public class TabuSearchService {
         int iteracionesSinMejora = 0;
 
         // 2. Bucle principal
-        for (int iter = 0; iter < ITERACIONES_MAXIMAS; iter++) {
+        for (int iter = 0; iter < iteracionesMaximas; iter++) {
             if (iteracionesSinMejora >= MAX_SIN_MEJORA) {
                 System.out.println("Parada temprana: " + MAX_SIN_MEJORA + " iteraciones sin mejora.");
                 break;
@@ -113,14 +120,27 @@ public class TabuSearchService {
 
         System.out.println("Optimización finalizada.");
 
-        // Reconstruir la solución final con las mejores rutas (solo pedidos de simulación)
+        // Reconstruir la solución final con las mejores rutas
         Solucion mejorSolucion = new Solucion();
         mejorSolucion.setFitness(mejorFitnessGlobal);
         mejorSolucion.setRutasAsignadas(mejorRutasGlobal);
-        for (Pedido pedido : pedidosSimulacion) {
-            List<Vuelo> ruta = mejorRutasGlobal.get(pedido.getIdPedido());
-            if (ruta != null && !ruta.isEmpty())
-                registrarImpactoAeropuertos(mejorSolucion, pedido, ruta, 1, mapaAeros);
+
+        // 1. RECUPERAR EL PESO DE LAS MALETAS HISTÓRICAS
+        if (pedidosHistoricos != null) {
+            for (Pedido pedido : pedidosHistoricos) {
+                List<Vuelo> ruta = mejorRutasGlobal.get(pedido.getIdPedido());
+                if (ruta != null && !ruta.isEmpty())
+                    registrarImpactoAeropuertos(mejorSolucion, pedido, ruta, 1, mapaAeros);
+            }
+        }
+
+        // 2. SUMAR EL PESO DE LAS MALETAS NUEVAS
+        if (pedidosSimulacion != null) {
+            for (Pedido pedido : pedidosSimulacion) {
+                List<Vuelo> ruta = mejorRutasGlobal.get(pedido.getIdPedido());
+                if (ruta != null && !ruta.isEmpty())
+                    registrarImpactoAeropuertos(mejorSolucion, pedido, ruta, 1, mapaAeros);
+            }
         }
 
         realizarDiagnosticoColapso(mejorSolucion, pedidosSimulacion, mapaAeros, mapaVuelos);
