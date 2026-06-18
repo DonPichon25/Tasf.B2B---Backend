@@ -12,7 +12,8 @@ public class Solucion {
     private Map<String, Integer> ocupacionAeropuertos;
 
     // Campos que necesita el frontend para renderizar aviones y métricas
-    private Map<String, Integer> capacidadesVuelos;   // "LIM-BOG-08:00" → capacidadMax
+    private Map<String, Integer> capacidadesVuelos;      // "LIM-BOG-08:00" → capacidadMax
+    private Map<String, Integer> capacidadesAeropuertos; // "SPIM" → capacidadMax
     private int totalPedidos;
     private double tasaExito;
     private double tiempoPromedioIntra;
@@ -25,6 +26,7 @@ public class Solucion {
         this.ocupacionVuelos = new HashMap<>();
         this.ocupacionAeropuertos = new HashMap<>();
         this.capacidadesVuelos = new HashMap<>();
+        this.capacidadesAeropuertos = new HashMap<>();
         this.fitness = Double.MAX_VALUE;
     }
 

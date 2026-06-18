@@ -31,7 +31,16 @@ public class TabuSearchService {
         String atributoTabu
     ) {}
 
+    // Variante que recibe el estado acumulado de pasos anteriores en lugar de recalcular el histórico completo
+    public Solucion ejecutarOptimizacionConEstado(Solucion estadoBase, List<Pedido> pedidosSimulacion, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos, int iteracionesMaximas) {
+        return ejecutarOptimizacion(List.of(), pedidosSimulacion, vuelosTotales, aeropuertos, iteracionesMaximas, estadoBase);
+    }
+
     public Solucion ejecutarOptimizacion(List<Pedido> pedidosHistoricos, List<Pedido> pedidosSimulacion, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos, int iteracionesMaximas) {
+        return ejecutarOptimizacion(pedidosHistoricos, pedidosSimulacion, vuelosTotales, aeropuertos, iteracionesMaximas, null);
+    }
+
+    private Solucion ejecutarOptimizacion(List<Pedido> pedidosHistoricos, List<Pedido> pedidosSimulacion, List<Vuelo> vuelosTotales, List<Aeropuerto> aeropuertos, int iteracionesMaximas, Solucion estadoBaseExterno) {
         System.out.println("Iniciando Búsqueda Tabú para " + pedidosSimulacion.size() + " pedidos de simulación...");
 
         Map<String, Aeropuerto> mapaAeros = new HashMap<>();
@@ -51,10 +60,16 @@ public class TabuSearchService {
             vuelosPorOrigen.computeIfAbsent(v.getOrigen(), k -> new ArrayList<>()).add(v);
 
         // 0. WARM-UP HISTÓRICO: Pre-llenar la red con los pedidos del pasado usando solo el algoritmo Voraz
-        Solucion estadoBase = new Solucion();
-        if (pedidosHistoricos != null && !pedidosHistoricos.isEmpty()) {
-            estadoBase = generarSolucionInicialVoraz(pedidosHistoricos, vuelosPorOrigen, mapaAeros);
-            // Nota: El histórico no se optimiza con Tabú porque ya pasó, solo nos interesa su impacto físico
+        // Si viene un estadoBaseExterno (modo acumulado), lo usamos directamente sin recalcular el histórico
+        Solucion estadoBase;
+        if (estadoBaseExterno != null) {
+            estadoBase = estadoBaseExterno;
+        } else {
+            estadoBase = new Solucion();
+            if (pedidosHistoricos != null && !pedidosHistoricos.isEmpty()) {
+                estadoBase = generarSolucionInicialVoraz(pedidosHistoricos, vuelosPorOrigen, mapaAeros);
+                // Nota: El histórico no se optimiza con Tabú porque ya pasó, solo nos interesa su impacto físico
+            }
         }
 
         // 1. Solución inicial voraz para pedidos de simulación (AHORA PARTIENDO DEL ESTADO BASE)
@@ -75,7 +90,7 @@ public class TabuSearchService {
         // 2. Bucle principal
         for (int iter = 0; iter < iteracionesMaximas; iter++) {
             if (iteracionesSinMejora >= MAX_SIN_MEJORA) {
-                System.out.println("Parada temprana: " + MAX_SIN_MEJORA + " iteraciones sin mejora.");
+                // System.out.println("Parada temprana: " + MAX_SIN_MEJORA + " iteraciones sin mejora.");
                 break;
             }
 
@@ -112,7 +127,7 @@ public class TabuSearchService {
                 mejorFitnessGlobal = solucionActual.getFitness();
                 mejorRutasGlobal = new HashMap<>(solucionActual.getRutasAsignadas());
                 iteracionesSinMejora = 0;
-                System.out.println("Iter " + iter + " | Nuevo mejor Fitness: " + mejorFitnessGlobal);
+                // System.out.println("Iter " + iter + " | Nuevo mejor Fitness: " + mejorFitnessGlobal);
             } else {
                 iteracionesSinMejora++;
             }

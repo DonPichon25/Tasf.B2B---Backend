@@ -52,62 +52,79 @@ public class AsyncSimulacionService {
             List<Aeropuerto> aeropuertos = aeropuertoRepository.findAll();
             List<Vuelo> vuelos = vueloRepository.findAll();
 
-            // 1. APLICAR LO DEL VIDEO XD (Sa, K, Sc)
-            int Sa = 5; // Salto base de 5 minutos
+            // 1. PARÁMETROS (Sa, K, Sc)
+            int Sa_minutos = 1; // Salto del algoritmo: 1 minuto real por ejecución
             int K;
-            if (dias <= 3) K = 14;
-            else if (dias <= 5) K = 24;
-            else K = 33; // Para 7 días o más
+            if (dias <= 3) K = 72;
+            else if (dias <= 5) K = 120;
+            else K = 168; // Para 7 días o más
 
-            int Sc = K * Sa; // Salto de consumo en minutos virtuales (Ej: 70 min)
+            int Sc = K; // Salto de consumo en minutos virtuales (K × 1 min virtual)
             int totalMinutosVirtuales = dias * 24 * 60;
             int totalPasos = (int) Math.ceil((double) totalMinutosVirtuales / Sc);
 
-            // 2. CONFIGURAR TIEMPO REAL (Target: 30 minutos reales = 1800 segundos)
-            // Calculamos cuánto debe demorar cada paso para estirar la simulación
-            long sleepMillis = (1800 / Math.max(1, totalPasos)) * 1000L;
+            // 2. CONFIGURAR TIEMPO REAL (Sa = 1 minuto real por paso)
+            long sleepMillis = Sa_minutos * 60 * 1000L; // 60,000 ms = 1 minuto
 
             System.out.println("Iniciando Job " + jobId + " | Días: " + dias + " | Pasos: " + totalPasos + " | Sc: " + Sc + "min");
 
+            // Estado acumulado entre pasos: evita recalcular el histórico completo en cada iteración
+            Solucion estadoAcumulado = new Solucion();
+
+            // Acumulador de métricas globales (no se reinicia entre pasos, a diferencia de la ocupación)
+            MetricasAcumuladas metricas = new MetricasAcumuladas();
+
+            // Tabla de tiempos para resumen final
+            long[] tQuery = new long[totalPasos];
+            long[] tTabu  = new long[totalPasos];
+            long[] tAcum  = new long[totalPasos];
+            long[] tEnriq = new long[totalPasos];
+            long[] tFilt  = new long[totalPasos];
+            long[] tSleep = new long[totalPasos];
+
             // 3. BUCLE DE CONSUMO POR BLOQUES
             for (int paso = 0; paso < totalPasos; paso++) {
+                long inicioPaso = System.currentTimeMillis();
                 LocalDateTime ventanaInicio = inicio.plusMinutes((long) paso * Sc);
                 LocalDateTime ventanaFin = ventanaInicio.plusMinutes(Sc);
 
-                // A. Histórico: Todo lo que pasó antes de esta ventana
-                List<Pedido> pedidosHistoricos = jdbc.query(
-                        "SELECT id_pedido, origen, destino, fecha_registro, cantidad_maletas, id_cliente " +
-                                "FROM pedidos WHERE fecha_registro >= ? AND fecha_registro < ? ORDER BY fecha_registro",
-                        PEDIDO_MAPPER, inicio, ventanaInicio); // <-- Ahora usa 'inicio' como límite inferior
-
-                // B. Nuevos: Los pedidos de este bloque Sc específico
+                // B. Query BD
+                long t0 = System.currentTimeMillis();
                 List<Pedido> pedidosNuevos = jdbc.query(
                         "SELECT id_pedido, origen, destino, fecha_registro, cantidad_maletas, id_cliente " +
                                 "FROM pedidos WHERE fecha_registro >= ? AND fecha_registro < ? ORDER BY fecha_registro",
                         PEDIDO_MAPPER, ventanaInicio, ventanaFin);
+                tQuery[paso] = System.currentTimeMillis() - t0;
 
                 // C. Ejecutar Algoritmo (Ta)
+                t0 = System.currentTimeMillis();
                 Solucion solucionParcial;
                 if (pedidosNuevos.isEmpty()) {
-                    solucionParcial = tabuSearchService.ejecutarOptimizacion(pedidosHistoricos, List.of(), vuelos, aeropuertos, 0);
+                    solucionParcial = tabuSearchService.ejecutarOptimizacion(List.of(), List.of(), vuelos, aeropuertos, 0);
                 } else {
-                    solucionParcial = tabuSearchService.ejecutarOptimizacion(pedidosHistoricos, pedidosNuevos, vuelos, aeropuertos, 20); // Usamos menos iteraciones por paso para control
+                    solucionParcial = tabuSearchService.ejecutarOptimizacionConEstado(estadoAcumulado, pedidosNuevos, vuelos, aeropuertos, 20);
                 }
+                tTabu[paso] = System.currentTimeMillis() - t0;
 
-                // D. Enriquecer la solución con las métricas ACUMULADAS
-                List<Pedido> todosLosPedidosHastaAhora = new java.util.ArrayList<>(pedidosHistoricos);
-                todosLosPedidosHastaAhora.addAll(pedidosNuevos);
-                enriquecerSolucion(solucionParcial, vuelos, aeropuertos, todosLosPedidosHastaAhora);
+                // Acumular ocupación: solucionParcial ya tiene el estado completo (base + nuevos)
+                // Solo actualizamos estadoAcumulado para que el siguiente paso lo use como base
+                t0 = System.currentTimeMillis();
+                estadoAcumulado.getOcupacionVuelos().putAll(solucionParcial.getOcupacionVuelos());
+                estadoAcumulado.getOcupacionAeropuertos().putAll(solucionParcial.getOcupacionAeropuertos());
+                tAcum[paso] = System.currentTimeMillis() - t0;
 
-                // --- FILTROS ESTRICTOS ANTI OUT-OF-MEMORY ---
+                // D. Enriquecer
+                t0 = System.currentTimeMillis();
+                enriquecerSolucion(solucionParcial, vuelos, aeropuertos, pedidosNuevos, metricas);
+                tEnriq[paso] = System.currentTimeMillis() - t0;
 
-                // 1. Filtrar rutas: Enviar solo las del bloque actual
+                // --- FILTROS ---
+                t0 = System.currentTimeMillis();
                 Map<String, List<Vuelo>> rutasFiltradas = solucionParcial.getRutasAsignadas().entrySet().stream()
                         .filter(e -> pedidosNuevos.stream().anyMatch(p -> p.getIdPedido().equals(e.getKey())))
                         .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
                 solucionParcial.setRutasAsignadas(rutasFiltradas);
 
-                // 2. Filtrar capacidadesVuelos (El culpable del peso): Solo enviamos las capacidades de los vuelos que viajan ahora
                 java.util.Set<String> vuelosActivos = new java.util.HashSet<>();
                 for (List<Vuelo> ruta : rutasFiltradas.values()) {
                     for (Vuelo v : ruta) vuelosActivos.add(v.getOrigen() + "-" + v.getDestino() + "-" + v.getHoraSalida());
@@ -115,30 +132,59 @@ public class AsyncSimulacionService {
                 solucionParcial.setCapacidadesVuelos(solucionParcial.getCapacidadesVuelos().entrySet().stream()
                         .filter(e -> vuelosActivos.contains(e.getKey()))
                         .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-
-                // 3. Filtrar ocupacionVuelos: Ordenamos de mayor a menor y mandamos top 100
                 solucionParcial.setOcupacionVuelos(solucionParcial.getOcupacionVuelos().entrySet().stream()
                         .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
                         .limit(100)
                         .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
-
-                // 4. Filtrar ocupacionAeropuertos: Ordenamos de mayor a menor y mandamos top 100 (para los Cuellos de Botella)
                 solucionParcial.setOcupacionAeropuertos(solucionParcial.getOcupacionAeropuertos().entrySet().stream()
                         .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
                         .limit(100)
                         .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
+                tFilt[paso] = System.currentTimeMillis() - t0;
 
                 // E. Actualizar el estado global del Job
                 double progreso = ((paso + 1.0) / totalPasos) * 100.0;
                 job.setProgreso(progreso);
                 job.setSolucionParcial(solucionParcial);
+                job.setVentanaVirtual(
+                    ventanaInicio.toLocalDate() + " " + ventanaInicio.toLocalTime().toString().substring(0, 5) +
+                    " → " +
+                    ventanaFin.toLocalDate() + " " + ventanaFin.toLocalTime().toString().substring(0, 5)
+                );
 
-                // F. Estirar el tiempo (El delay visual para llegar a los 30 min reales)
-                Thread.sleep(sleepMillis);
+                // F. Sleep descontando TODAS las fases (Query + Tabú + Acum + Enriquecer + Filtros)
+                long tiempoNoSleep = tQuery[paso] + tTabu[paso] + tAcum[paso] + tEnriq[paso] + tFilt[paso];
+                long sleepReal = Math.max(0, sleepMillis - tiempoNoSleep);
+                tSleep[paso] = sleepReal;
+                Thread.sleep(sleepReal);
             }
 
             job.setEstado("COMPLETADO");
             job.setProgreso(100.0);
+
+            // RESUMEN FINAL DE TIEMPOS
+            System.out.println("\n========== RESUMEN DE TIEMPOS POR PASO ==========");
+            System.out.printf("%-6s | %-8s | %-8s | %-8s | %-8s | %-8s | %-8s | %-8s%n",
+                "Paso", "Query", "Tabú", "Acum", "Enriq", "Filtros", "Sleep", "TOTAL");
+            System.out.println("-------------------------------------------------------------------------");
+            long sumQuery=0, sumTabu=0, sumAcum=0, sumEnriq=0, sumFilt=0, sumSleep=0;
+            for (int i = 0; i < totalPasos; i++) {
+                long total = tQuery[i] + tTabu[i] + tAcum[i] + tEnriq[i] + tFilt[i] + tSleep[i];
+                System.out.printf("%-6d | %6dms | %6dms | %6dms | %6dms | %6dms | %6dms | %6dms%n",
+                    i+1, tQuery[i], tTabu[i], tAcum[i], tEnriq[i], tFilt[i], tSleep[i], total);
+                sumQuery+=tQuery[i]; sumTabu+=tTabu[i]; sumAcum+=tAcum[i];
+                sumEnriq+=tEnriq[i]; sumFilt+=tFilt[i]; sumSleep+=tSleep[i];
+            }
+            System.out.println("-------------------------------------------------------------------------");
+            System.out.printf("PROMEDIO | %6dms | %6dms | %6dms | %6dms | %6dms | %6dms | %6dms%n",
+                sumQuery/totalPasos, sumTabu/totalPasos, sumAcum/totalPasos,
+                sumEnriq/totalPasos, sumFilt/totalPasos, sumSleep/totalPasos,
+                (sumQuery+sumTabu+sumAcum+sumEnriq+sumFilt+sumSleep)/totalPasos);
+            System.out.printf("TOTAL REAL: %.1f seg (%.1f min)%n",
+                (sumQuery+sumTabu+sumAcum+sumEnriq+sumFilt+sumSleep)/1000.0,
+                (sumQuery+sumTabu+sumAcum+sumEnriq+sumFilt+sumSleep)/60000.0);
+            System.out.println("==================================================\n");
+
             System.out.println("Job " + jobId + " COMPLETADO.");
 
         } catch (Exception e) {
@@ -148,10 +194,21 @@ public class AsyncSimulacionService {
         }
     }
 
-    private void enriquecerSolucion(Solucion solucion, List<Vuelo> vuelos, List<Aeropuerto> aeropuertos, List<Pedido> pedidos) {
+    // Mantiene las sumas y conteos a través de todos los pasos de la simulación
+    private static class MetricasAcumuladas {
+        double totalMinIntra = 0, totalMinInter = 0;
+        int countIntra = 0, countInter = 0, exitosos = 0;
+    }
+
+    private void enriquecerSolucion(Solucion solucion, List<Vuelo> vuelos, List<Aeropuerto> aeropuertos,
+            List<Pedido> pedidos, MetricasAcumuladas metricas) {
         Map<String, Integer> caps = new HashMap<>();
         for (Vuelo v : vuelos) caps.put(v.getOrigen() + "-" + v.getDestino() + "-" + v.getHoraSalida(), v.getCapacidadMax());
         solucion.setCapacidadesVuelos(caps);
+
+        Map<String, Integer> capsAeros = new HashMap<>();
+        for (Aeropuerto a : aeropuertos) capsAeros.put(a.getCodigo(), a.getCapacidadMax());
+        solucion.setCapacidadesAeropuertos(capsAeros);
 
         Map<String, Aeropuerto> mapaAeros = new HashMap<>();
         for (Aeropuerto a : aeropuertos) mapaAeros.put(a.getCodigo(), a);
@@ -159,10 +216,9 @@ public class AsyncSimulacionService {
         Map<String, Pedido> mapaPedidos = new HashMap<>();
         for (Pedido p : pedidos) mapaPedidos.put(p.getIdPedido(), p);
 
-        double totalMinIntra = 0, totalMinInter = 0;
-        int countIntra = 0, countInter = 0, exitosos = 0;
         final long SLA_INTRA = 720, SLA_INTER = 1440;
 
+        // Solo se calculan las métricas del bloque actual (pedidos nuevos), pero se SUMAN al acumulado global
         for (Map.Entry<String, List<Vuelo>> entry : solucion.getRutasAsignadas().entrySet()) {
             List<Vuelo> ruta = entry.getValue();
             if (ruta == null || ruta.isEmpty()) continue;
@@ -181,15 +237,16 @@ public class AsyncSimulacionService {
             totalMin += TimeCalculator.TIEMPO_RECOJO_FINAL;
 
             if (aOrigen.getContinente().equals(aDestino.getContinente())) {
-                totalMinIntra += totalMin; countIntra++; if (totalMin <= SLA_INTRA) exitosos++;
+                metricas.totalMinIntra += totalMin; metricas.countIntra++; if (totalMin <= SLA_INTRA) metricas.exitosos++;
             } else {
-                totalMinInter += totalMin; countInter++; if (totalMin <= SLA_INTER) exitosos++;
+                metricas.totalMinInter += totalMin; metricas.countInter++; if (totalMin <= SLA_INTER) metricas.exitosos++;
             }
         }
-        int totalAsignados = countIntra + countInter;
+
+        int totalAsignados = metricas.countIntra + metricas.countInter;
         solucion.setTotalPedidos(totalAsignados);
-        solucion.setTasaExito(totalAsignados > 0 ? (exitosos * 100.0 / totalAsignados) : 0);
-        solucion.setTiempoPromedioIntra(countIntra > 0 ? (totalMinIntra / countIntra / 60.0) : 0);
-        solucion.setTiempoPromedioInter(countInter > 0 ? (totalMinInter / countInter / 60.0) : 0);
+        solucion.setTasaExito(totalAsignados > 0 ? (metricas.exitosos * 100.0 / totalAsignados) : 0);
+        solucion.setTiempoPromedioIntra(metricas.countIntra > 0 ? (metricas.totalMinIntra / metricas.countIntra / 60.0) : 0);
+        solucion.setTiempoPromedioInter(metricas.countInter > 0 ? (metricas.totalMinInter / metricas.countInter / 60.0) : 0);
     }
 }

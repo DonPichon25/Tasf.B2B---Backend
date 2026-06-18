@@ -6,6 +6,7 @@ public class JobEstado {
     private double progreso;
     private Solucion solucionParcial;
     private String mensaje;
+    private String ventanaVirtual;
 
     public JobEstado(String id, String estado) {
         this.id = id;
@@ -24,4 +25,6 @@ public class JobEstado {
     public void setSolucionParcial(Solucion solucionParcial) { this.solucionParcial = solucionParcial; }
     public String getMensaje() { return mensaje; }
     public void setMensaje(String mensaje) { this.mensaje = mensaje; }
+    public String getVentanaVirtual() { return ventanaVirtual; }
+    public void setVentanaVirtual(String ventanaVirtual) { this.ventanaVirtual = ventanaVirtual; }
 }
